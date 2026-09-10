@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Anchor, Lock, User, Mail, Shield, CheckCircle2, AlertCircle, ArrowRight, Eye, EyeOff, Sparkles, X, UserCheck, Clock, FlaskConical } from 'lucide-react';
+import { Anchor, Lock, User, Mail, Shield, CheckCircle2, AlertCircle, ArrowRight, Eye, EyeOff, Sparkles, X, UserCheck, Clock, FlaskConical, Server, Settings } from 'lucide-react';
 import { PersonaType, UserResponse } from '../types';
-import { varunaAPI } from '../services/api';
+import { varunaAPI, API_BASE_URL, setCustomApiUrl, getStoredApiUrl } from '../services/api';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -29,6 +29,10 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
   const [password, setPassword] = useState<string>('');
   const [fullName, setFullName] = useState<string>('');
   const [role, setRole] = useState<PersonaType>('Fisherman');
+
+  // Backend API URL configuration
+  const [showServerConfig, setShowServerConfig] = useState<boolean>(false);
+  const [serverUrlInput, setServerUrlInput] = useState<string>(getStoredApiUrl() || '');
 
   if (!isOpen) return null;
 
@@ -62,7 +66,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
       onLoginSuccess(auth.user, auth.access_token);
       onClose();
     } catch (err: any) {
-      setErrorMessage(err.message || 'Login failed. Please check credentials.');
+      const msg = err?.message || 'Login failed. Please check credentials.';
+      if (msg.includes('405') || msg.includes('404')) {
+        setErrorMessage('Backend API returned Method Not Allowed (HTTP 405/404). Please configure your live backend URL below or verify VITE_API_URL.');
+      } else {
+        setErrorMessage(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -106,7 +115,12 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
         onClose();
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication error. Please try again.');
+      const msg = err?.message || 'Authentication error. Please try again.';
+      if (msg.includes('405') || msg.includes('404')) {
+        setErrorMessage('Backend API returned Method Not Allowed (HTTP 405/404). Please configure your live backend URL below or verify VITE_API_URL.');
+      } else {
+        setErrorMessage(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -461,8 +475,69 @@ export const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, onLogin
           </button>
         </form>
 
+        {/* Backend Server Configuration Toggle */}
+        <div className="border-t border-slate-800/80 pt-3">
+          <div className="flex items-center justify-between text-[11px] text-slate-400">
+            <span className="truncate max-w-[280px]">
+              API: <strong className="text-cyan-400 font-mono">{API_BASE_URL}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowServerConfig(!showServerConfig)}
+              className="text-cyan-400 hover:text-cyan-300 font-semibold underline flex items-center space-x-1 shrink-0"
+            >
+              <Settings className="w-3 h-3" />
+              <span>{showServerConfig ? 'Hide Config' : 'Configure Server'}</span>
+            </button>
+          </div>
+
+          {showServerConfig && (
+            <div className="mt-2.5 p-3 rounded-xl bg-slate-900/90 border border-cyan-500/30 text-xs space-y-2">
+              <div className="text-slate-200 font-bold flex items-center space-x-1.5">
+                <Server className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Custom FastAPI Backend URL</span>
+              </div>
+              <p className="text-[11px] text-slate-400">
+                If deployed on Render, Railway, or VPS, enter your service URL (e.g. <code>https://varuna-api.onrender.com</code>):
+              </p>
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  value={serverUrlInput}
+                  onChange={(e) => setServerUrlInput(e.target.value)}
+                  placeholder="https://your-backend.onrender.com"
+                  className="flex-1 bg-black border border-slate-700 rounded-lg px-2.5 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-cyan-400"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomApiUrl(serverUrlInput);
+                    window.location.reload();
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs shrink-0"
+                >
+                  Save & Reload
+                </button>
+                {serverUrlInput && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomApiUrl('');
+                      setServerUrlInput('');
+                      window.location.reload();
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs shrink-0"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Footer Note */}
-        <div className="text-center text-[11px] text-slate-500 border-t border-slate-800/80 pt-3">
+        <div className="text-center text-[11px] text-slate-500 pt-1">
           Protected by VARUNA Encrypted JWT Auth Protocol • SIH 2026
         </div>
       </div>
