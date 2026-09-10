@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* White frosted glass card with blue border */
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid rgba(37, 99, 235, 0.15);
+    box-shadow: 0 4px 24px 0 rgba(29, 78, 216, 0.07);
+  }
+
+  /* Elevated card with blue glow */
+  .glass-panel-glow {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(37, 99, 235, 0.30);
+    box-shadow: 0 0 36px -8px rgba(37, 99, 235, 0.18),
+                0 4px 24px 0 rgba(29, 78, 216, 0.07);
+  }
+
+  .glow-blue {
+    box-shadow: 0 0 25px rgba(37, 99, 235, 0.22);
+  }
+
+  /* Light cards must not inherit the low-contrast dark dashboard palette. */
+  .glass-panel .text-slate-100,
+  .glass-panel .text-slate-200,
+  .glass-panel .text-slate-300 {
+    color: #1e293b !important;
+  }
+
+  .glass-panel .text-slate-400,
+  .glass-panel .text-white\/30,
+  .glass-panel .text-white\/40,
+  .glass-panel .text-white\/60 {
+    color: #475569 !important;
+  }
+
+  .glass-panel .text-cyan-300,
+  .glass-panel .text-cyan-400 {
+    color: #0e7490 !important;
+  }
+
+  .glass-panel .text-emerald-300,
+  .glass-panel .text-emerald-400 {
+    color: #047857 !important;
+  }
+
+  .glass-panel .text-blue-300,
+  .glass-panel .text-blue-400 {
+    color: #1d4ed8 !important;
+  }
+
+  .glass-panel .text-amber-300,
+  .glass-panel .text-amber-400 {
+    color: #b45309 !important;
+  }
+
+  .glass-panel .text-red-300,
+  .glass-panel .text-red-400 {
+    color: #b91c1c !important;
+  }
+
+  .glass-panel .text-purple-300,
+  .glass-panel .text-purple-400 {
+    color: #7e22ce !important;
+  }
+
+  .glass-panel .text-indigo-300,
+  .glass-panel .text-indigo-400 {
+    color: #4338ca !important;
+  }
+}
+
+body {
+  background-color: #f0f6ff;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(191, 219, 254, 0.60) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 80%, rgba(219, 234, 254, 0.40) 0%, transparent 65%);
+  color: #0f172a;
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+
+/* Blue & White Scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #eff6ff; }
+::-webkit-scrollbar-thumb { background: #93c5fd; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #2563eb; }
+
+/* Blue Leaflet Popups */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip {
+  background: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  box-shadow: 0 10px 40px -5px rgba(29, 78, 216, 0.18);
+  border-radius: 14px;
+}
+.leaflet-popup-content {
+  margin: 12px 16px;
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+.leaflet-container {
+  background-color: #dbeafe !important;
+}
+
+

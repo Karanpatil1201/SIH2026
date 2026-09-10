@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VARUNA — Marine Ecosystem Intelligence</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --abyss:#f5f9fc;
+    --deep:#eaf3fa;
+    --panel:#ffffff;
+    --panel-2:#eef5fb;
+    --line:#cfe3f0;
+    --line-soft:#e0edf6;
+    --text:#0c2c42;
+    --text-dim:#4f7690;
+    --text-dimmer:#84a3b8;
+    --tide:#1470c4;
+    --tide-soft:#d7ebfa;
+    --current:#2f6fb0;
+    --coral:#d9723a;
+    --kelp:#1f9d6e;
+    --amber:#c4881f;
+    --crit:#cf3f3f;
+    --mono:'IBM Plex Mono', monospace;
+    --sans:'Space Grotesk', sans-serif;
+  }
+  html[data-theme="dark"]{
+    --abyss:#071720; --deep:#0c212c; --panel:#0f2733; --panel-2:#123240;
+    --line:#1e4351; --line-soft:#173544; --text:#dceaee; --text-dim:#7fa2ad; --text-dimmer:#537984;
+    --tide:#2dd4c4; --tide-soft:#1a5c58; --current:#5b9fd6; --coral:#ff8a5c; --kelp:#8fd694; --amber:#f2b84b; --crit:#ef5b5b;
+  }
+  html[data-theme="dark"] .spill.active, html[data-theme="dark"] .query-row button{color:#04231f;}
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--abyss);color:var(--text);font-family:var(--sans);}
+  body{
+    background:
+      radial-gradient(ellipse at 15% -10%, rgba(20,112,196,0.07), transparent 45%),
+      radial-gradient(ellipse at 90% 0%, rgba(47,111,176,0.06), transparent 40%),
+      var(--abyss);
+    min-height:100vh;
+  }
+  ::selection{background:var(--tide-soft);color:var(--text);}
+  a{color:inherit;}
+  .wrap{max-width:1440px;margin:0 auto;padding:0 22px;}
+
+  /* ---------- HEADER ---------- */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(255,255,255,0.9);backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line-soft);
+    box-shadow:0 1px 0 rgba(12,44,66,0.03);
+  }
+  .headbar{display:flex;align-items:center;gap:28px;padding:14px 0;}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:19px;letter-spacing:0.3px;white-space:nowrap;}
+  .brand .glyph{width:30px;height:30px;flex-shrink:0;}
+  .brand small{display:block;font-family:var(--mono);font-weight:500;font-size:10px;color:var(--text-dimmer);letter-spacing:1.5px;margin-top:1px;}
+  nav{display:flex;gap:4px;flex:1;overflow-x:auto;}
+  nav button{
+    background:none;border:none;color:var(--text-dim);font-family:var(--sans);font-size:14px;font-weight:500;
+    padding:8px 13px;border-radius:7px;cursor:pointer;white-space:nowrap;transition:all .15s;
+  }
+  nav button:hover{color:var(--text);background:rgba(255,255,255,0.04);}
+  nav button.active{color:var(--tide);background:rgba(45,212,196,0.1);}
+  .head-right{display:flex;align-items:center;gap:12px;}
+  .clock{font-family:var(--mono);font-size:12.5px;color:var(--text-dim);white-space:nowrap;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:var(--kelp);display:inline-block;margin-right:6px;box-shadow:0 0 0 0 rgba(31,157,110,.5);animation:pulse 2s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,157,110,.45)}70%{box-shadow:0 0 0 7px rgba(31,157,110,0)}100%{box-shadow:0 0 0 0 rgba(31,157,110,0)}}
+
+  /* ---------- SCENARIO BAR ---------- */
+  .scenario-bar{background:var(--deep);border-bottom:1px solid var(--line-soft);}
+  .scenario-inner{display:flex;align-items:center;gap:14px;padding:10px 0;flex-wrap:wrap;}
+  .scenario-label{font-family:var(--mono);font-size:11px;color:var(--text-dimmer);letter-spacing:1px;}
+  .scenario-pills{display:flex;gap:6px;}
+  .spill{
+    border:1px solid var(--line);background:var(--panel);color:var(--text-dim);
+    font-family:var(--sans);font-size:12.5px;padding:6px 12px;border-radius:20px;cursor:pointer;transition:all .15s;
+  }
+  .spill:hover{border-color:var(--tide);color:var(--text);}
+  .spill.active{background:var(--tide);color:#ffffff;border-color:var(--tide);font-weight:600;}
+
+  /* ---------- SECTIONS ---------- */
+  section{padding:34px 0;}
+  section.tight{padding:22px 0;}
+  h1.page-title{font-size:26px;margin:0 0 4px;font-weight:600;}
+  .subtitle{color:var(--text-dim);font-size:14px;margin:0 0 22px;max-width:640px;}
+  .section-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px;}
+  .section-head h2{font-size:16px;font-weight:600;margin:0;display:flex;align-items:center;gap:8px;}
+  .section-head .tag{font-family:var(--mono);font-size:10.5px;color:var(--text-dimmer);letter-spacing:1px;}
+
+  /* ---------- STATUS STRIP ---------- */
+  .status-strip{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line-soft);border:1px solid var(--line-soft);border-radius:12px;overflow:hidden;}
+  .status-cell{background:var(--panel);padding:16px 18px;}
+  .status-cell .k{font-family:var(--mono);font-size:10.5px;color:var(--text-dimmer);letter-spacing:1px;text-transform:uppercase;}
+  .status-cell .v{font-size:22px;font-weight:600;margin-top:6px;font-family:var(--mono);}
+  .status-cell .sub{font-size:11.5px;color:var(--text-dim);margin-top:3px;}
+  .risk-LOW{color:var(--kelp);} .risk-MEDIUM{color:var(--amber);} .risk-HIGH{color:var(--coral);} .risk-CRITICAL{color:var(--crit);}
+
+  /* ---------- GRID LAYOUT ---------- */
+  .board{display:grid;grid-template-columns:300px 1fr 340px;gap:18px;align-items:start;}
+  @media(max-width:1100px){.board{grid-template-columns:1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--line-soft);border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(12,44,66,0.04);}
+  .panel-title{font-size:13px;font-weight:600;margin:0 0 12px;display:flex;align-items:center;gap:7px;}
+
+  /* agent cards */
+  .agent-card{border:1px solid var(--line-soft);border-radius:10px;padding:11px 12px;margin-bottom:8px;background:var(--panel-2);cursor:default;transition:border-color .2s,box-shadow .2s;position:relative;}
+  .agent-card.selected{border-color:var(--tide);box-shadow:0 0 0 1px rgba(45,212,196,0.25);}
+  .agent-card.thinking{border-color:var(--amber);}
+  .agent-top{display:flex;align-items:center;justify-content:space-between;}
+  .agent-name{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;}
+  .agent-emoji{font-size:16px;}
+  .agent-status{font-family:var(--mono);font-size:9.5px;padding:2px 7px;border-radius:20px;letter-spacing:.5px;text-transform:uppercase;}
+  .st-idle{color:var(--text-dimmer);background:rgba(127,162,173,0.1);}
+  .st-thinking{color:var(--amber);background:rgba(242,184,75,0.12);}
+  .st-done{color:var(--kelp);background:rgba(143,214,148,0.12);}
+  .agent-finding{font-size:12px;color:var(--text-dim);margin-top:7px;line-height:1.45;min-height:16px;}
+  .agent-conf-row{display:flex;align-items:center;gap:7px;margin-top:8px;}
+  .conf-bar{flex:1;height:4px;background:var(--line-soft);border-radius:3px;overflow:hidden;}
+  .conf-fill{height:100%;background:linear-gradient(90deg,var(--current),var(--tide));width:0%;transition:width .6s ease;}
+  .conf-num{font-family:var(--mono);font-size:10.5px;color:var(--text-dim);width:32px;text-align:right;}
+
+  /* query console */
+  .console{border:1px solid var(--line-soft);border-radius:12px;background:var(--panel);padding:16px;margin-bottom:18px;}
+  .query-row{display:flex;gap:8px;}
+  .query-row input{
+    flex:1;background:var(--deep);border:1px solid var(--line);color:var(--text);
+    padding:11px 13px;border-radius:8px;font-family:var(--sans);font-size:14px;
+  }
+  .query-row input:focus{outline:none;border-color:var(--tide);}
+  .query-row button{
+    background:var(--tide);color:#ffffff;border:none;padding:0 18px;border-radius:8px;font-weight:600;font-size:13.5px;cursor:pointer;
+  }
+  .query-row button:disabled{opacity:.5;cursor:not-allowed;}
+  .presets{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;}
+  .preset{font-size:11.5px;color:var(--text-dim);border:1px solid var(--line-soft);padding:5px 10px;border-radius:20px;cursor:pointer;background:transparent;font-family:var(--sans);}
+  .preset:hover{color:var(--text);border-color:var(--tide);}
+
+  /* reasoning flow */
+  .flow{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 2px;overflow-x:auto;}
+  .flow-node{flex:1;min-width:110px;text-align:center;padding:12px 8px;border-radius:9px;border:1px solid var(--line-soft);background:var(--panel-2);font-size:11.5px;color:var(--text-dim);transition:all .3s;}
+  .flow-node.active{border-color:var(--amber);color:var(--amber);box-shadow:0 0 14px rgba(196,136,31,0.12);}
+  .flow-node.done{border-color:var(--tide);color:var(--tide);}
+  .flow-arrow{color:var(--text-dimmer);font-size:16px;}
+
+  /* map */
+  #map{height:400px;border-radius:10px;overflow:hidden;border:1px solid var(--line-soft);}
+  .layer-toggles{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 0;}
+  .ltoggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim);border:1px solid var(--line-soft);padding:5px 10px 5px 8px;border-radius:20px;cursor:pointer;user-select:none;}
+  .ltoggle input{accent-color:var(--tide);}
+  .ltoggle.on{color:var(--text);border-color:var(--tide);}
+  .swatch{width:9px;height:9px;border-radius:50%;display:inline-block;}
+
+  /* evidence panel */
+  .assessment-badge{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px;font-weight:600;padding:8px 12px;border-radius:8px;margin-bottom:10px;}
+  .assessment-LOW{background:rgba(143,214,148,0.12);color:var(--kelp);}
+  .assessment-MEDIUM{background:rgba(242,184,75,0.12);color:var(--amber);}
+  .assessment-HIGH{background:rgba(255,138,92,0.12);color:var(--coral);}
+  .assessment-CRITICAL{background:rgba(239,91,91,0.14);color:var(--crit);}
+  .ev-row{display:flex;justify-content:space-between;font-size:12.5px;padding:7px 0;border-bottom:1px solid var(--line-soft);}
+  .ev-row:last-child{border-bottom:none;}
+  .ev-row .k{color:var(--text-dimmer);}
+  .contrib-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;}
+  .chip{font-size:11px;font-family:var(--mono);background:var(--panel-2);border:1px solid var(--line-soft);padding:3px 8px;border-radius:20px;color:var(--text-dim);}
+  .chip.on{color:var(--tide);border-color:var(--tide-soft);}
+  ul.evlist{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--text-dim);line-height:1.7;}
+  .actions-box{margin-top:12px;background:rgba(20,112,196,0.05);border:1px solid var(--tide-soft);border-radius:8px;padding:10px 12px;font-size:12.5px;color:var(--text);}
+
+  /* alerts */
+  .alert-card{border-left:3px solid var(--line);background:var(--panel-2);border-radius:0 8px 8px 0;padding:10px 12px;margin-bottom:8px;}
+  .alert-card.LOW{border-color:var(--kelp);} .alert-card.MEDIUM{border-color:var(--amber);}
+  .alert-card.HIGH{border-color:var(--coral);} .alert-card.CRITICAL{border-color:var(--crit);}
+  .alert-top{display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;}
+  .alert-meta{font-size:11px;color:var(--text-dimmer);margin-top:3px;font-family:var(--mono);}
+  .alert-body{font-size:12px;color:var(--text-dim);margin-top:5px;line-height:1.5;}
+
+  /* digital twin */
+  .twin-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:18px;}
+  @media(max-width:900px){.twin-grid{grid-template-columns:1fr;}}
+  .slider-row{margin-top:14px;}
+  .slider-row label{font-size:12.5px;color:var(--text-dim);display:flex;justify-content:space-between;font-family:var(--mono);}
+  input[type=range]{width:100%;accent-color:var(--tide);margin-top:8px;}
+  .impact-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;}
+  .impact-cell{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:8px;padding:10px 12px;}
+  .impact-cell .k{font-size:10.5px;color:var(--text-dimmer);font-family:var(--mono);letter-spacing:.5px;}
+  .impact-cell .v{font-size:18px;font-weight:600;margin-top:4px;}
+
+  /* continuous learning diagram */
+  .cl-flow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:center;padding:20px 0 6px;}
+  .cl-node{background:var(--panel-2);border:1px solid var(--line-soft);border-radius:9px;padding:12px 16px;font-size:12.5px;color:var(--text-dim);text-align:center;min-width:120px;}
+  .fb-row{display:flex;gap:8px;justify-content:center;margin-top:14px;}
+  .fb-btn{border:1px solid var(--line-soft);background:var(--panel-2);color:var(--text-dim);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px;}
+  .fb-btn:hover{border-color:var(--tide);color:var(--text);}
+  .fb-count{font-family:var(--mono);font-size:11px;color:var(--text-dimmer);text-align:center;margin-top:8px;}
+
+  footer{border-top:1px solid var(--line-soft);padding:26px 0 40px;color:var(--text-dimmer);font-size:12px;line-height:1.7;}
+  footer b{color:var(--text-dim);}
+  .arch-note{background:var(--panel);border:1px solid var(--line-soft);border-radius:10px;padding:14px 16px;margin-top:14px;font-size:12.5px;color:var(--text-dim);}
+
+  ::-webkit-scrollbar{height:8px;width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+  /* ---------- NEW FEATURES ---------- */
+  .theme-toggle{border:1px solid var(--line);background:var(--panel);color:var(--text-dim);width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;}
+  .theme-toggle:hover{border-color:var(--tide);color:var(--text);}
+
+  .loc-select{border:1px solid var(--line);background:var(--panel);color:var(--text);font-family:var(--sans);font-size:12.5px;padding:6px 10px;border-radius:20px;cursor:pointer;}
+  .loc-select:focus{outline:none;border-color:var(--tide);}
+
+  .sparkline{margin-top:8px;display:block;}
+  .info-btn{border:1px solid var(--line-soft);background:var(--panel);color:var(--text-dimmer);width:18px;height:18px;border-radius:50%;font-size:10.5px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .info-btn:hover{border-color:var(--tide);color:var(--tide);}
+
+  .conflict-card{border:1px solid var(--line-soft);background:var(--panel-2);border-radius:10px;padding:12px 14px;margin-bottom:10px;}
+  .conflict-title{font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:7px;color:var(--coral);}
+  .conflict-body{font-size:12px;color:var(--text-dim);margin-top:5px;line-height:1.55;}
+  .conflict-resolution{margin-top:7px;font-size:12px;background:rgba(20,112,196,0.05);border:1px solid var(--tide-soft);border-radius:7px;padding:7px 10px;color:var(--text);}
+  .no-conflicts{font-size:12.5px;color:var(--text-dim);padding:6px 2px;}
+
+  .forecast-wrap{margin-top:14px;}
+  .forecast-legend{display:flex;gap:14px;font-size:11px;color:var(--text-dim);margin-top:8px;font-family:var(--mono);}
+  .forecast-legend span{display:flex;align-items:center;gap:5px;}
+  .forecast-legend i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+
+  .log-entry{border-bottom:1px solid var(--line-soft);padding:9px 0;font-size:12px;}
+  .log-entry:last-child{border-bottom:none;}
+  .log-top{display:flex;justify-content:space-between;color:var(--text-dim);}
+  .log-time{font-family:var(--mono);font-size:10.5px;color:var(--text-dimmer);}
+  .log-query{color:var(--text);font-weight:500;margin-top:2px;}
+  .log-meta{margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;}
+  .log-empty{font-size:12.5px;color:var(--text-dim);padding:6px 2px;}
+
+  .filter-row{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+  .filter-pill{border:1px solid var(--line-soft);background:var(--panel);color:var(--text-dim);font-size:11.5px;padding:5px 12px;border-radius:20px;cursor:pointer;}
+  .filter-pill.active{background:var(--tide);color:#fff;border-color:var(--tide);}
+  html[data-theme="dark"] .filter-pill.active{color:#04231f;}
+
+  .toast-stack{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:8px;max-width:320px;}
+  .toast{background:var(--panel);border:1px solid var(--line-soft);border-left:4px solid var(--tide);border-radius:8px;padding:11px 13px;font-size:12.5px;box-shadow:0 6px 18px rgba(12,44,66,0.12);animation:toastIn .25s ease;}
+  .toast.HIGH{border-left-color:var(--coral);} .toast.CRITICAL{border-left-color:var(--crit);} .toast.MEDIUM{border-left-color:var(--amber);}
+  .toast .tt{font-weight:600;margin-bottom:2px;}
+  @keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(12,44,66,0.35);display:none;align-items:center;justify-content:center;z-index:300;padding:20px;}
+  .modal-overlay.open{display:flex;}
+  .modal-box{background:var(--panel);border:1px solid var(--line-soft);border-radius:14px;padding:22px;max-width:440px;width:100%;box-shadow:0 20px 50px rgba(12,44,66,0.2);}
+  .modal-box h3{margin:0 0 4px;font-size:17px;display:flex;align-items:center;gap:8px;}
+  .modal-close{float:right;border:none;background:none;color:var(--text-dim);font-size:18px;cursor:pointer;}
+  .modal-section{margin-top:12px;}
+  .modal-section .k{font-family:var(--mono);font-size:10.5px;color:var(--text-dimmer);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;}
+  .modal-section ul{margin:0;padding-left:18px;font-size:12.5px;color:var(--text-dim);line-height:1.7;}
+
+  .export-btn{border:1px solid var(--line-soft);background:var(--panel-2);color:var(--text-dim);font-size:11.5px;padding:6px 11px;border-radius:7px;cursor:pointer;font-family:var(--sans);}
+  .export-btn:hover{border-color:var(--tide);color:var(--tide);}
+
+  .compare-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+  .compare-table th,.compare-table td{border:1px solid var(--line-soft);padding:8px 10px;text-align:left;}
+  .compare-table th{background:var(--panel-2);font-family:var(--mono);font-size:10.5px;letter-spacing:.5px;color:var(--text-dimmer);text-transform:uppercase;}
+  .compare-table td.num{font-family:var(--mono);}
+</style>
+</head>
+<body data-theme="dark">
+
+<header>
+  <div class="wrap headbar">
+    <div class="brand">
+      <svg class="glyph" viewBox="0 0 32 32" fill="none">
+        <circle cx="16" cy="16" r="15" stroke="#2dd4c4" stroke-width="1.4" opacity="0.4"/>
+        <path d="M6 18c3-3 5-3 8 0s5 3 8 0" stroke="#2dd4c4" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <path d="M6 23c3-3 5-3 8 0s5 3 8 0" stroke="#5b9fd6" stroke-width="1.8" fill="none" stroke-linecap="round" opacity="0.7"/>
+        <circle cx="16" cy="10" r="2.6" fill="#2dd4c4"/>
+      </svg>
+      <div>VARUNA<small>MARINE ECOSYSTEM INTELLIGENCE</small></div>
+    </div>
+    <nav id="mainNav">
+      <button class="active" data-target="dashboard">Dashboard</button>
+      <button data-target="mapSection">Marine Map</button>
+      <button data-target="agentSection">Agent Intelligence</button>
+      <button data-target="alertSection">Alerts</button>
+      <button data-target="twinSection">Predictions</button>
+      <button data-target="ecoSection">Ecosystem Analysis</button>
+    </nav>
+    <div class="head-right">
+      <span class="clock"><span class="live-dot"></span><span id="clockText">--:--:--</span></span>
+      <button class="theme-toggle" id="themeToggle" title="Toggle light / dark theme">☀️</button>
+    </div>
+  </div>
+</header>
+
+<div class="scenario-bar">
+  <div class="wrap scenario-inner">
+    <span class="scenario-label">DEMO MODE — SCENARIO</span>
+    <div class="scenario-pills">
+      <button class="spill active" data-scn="normal">Normal Conditions</button>
+      <button class="spill" data-scn="stress">Ecosystem Stress</button>
+      <button class="spill" data-scn="severe">Severe Weather Warning</button>
+    </div>
+    <select class="loc-select" id="locSelect"></select>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--text-dimmer);" id="regionLabel">Region: Bay of Bengal · Chennai–Puducherry Coast</span>
+  </div>
+</div>
+
+<div class="wrap" id="dashboard">
+
+<section class="tight">
+  <div class="status-strip" id="statusStrip"></div>
+</section>
+
+<section class="tight">
+  <div class="console">
+    <div class="section-head" style="margin-bottom:10px;">
+      <h2>🧭 Natural-Language Marine Assistant <span class="tag">MASTER AGENT ENTRY POINT</span></h2>
+    </div>
+    <div class="query-row">
+      <input id="queryInput" type="text" placeholder="Ask VARUNA — e.g. 'Is this region safe right now?'"/>
+      <button id="runQueryBtn">Analyse</button>
+    </div>
+    <div class="presets">
+      <button class="preset" data-q="Is the marine ecosystem near this coastal region currently under stress?">Is the ecosystem under stress?</button>
+      <button class="preset" data-q="Is this region safe for fishing operations today?">Is this region safe today?</button>
+      <button class="preset" data-q="What are the major marine risks today?">Major risks today?</button>
+      <button class="preset" data-q="Why is the coral reef showing bleaching risk?">Why coral bleaching risk?</button>
+      <button class="preset" data-q="Which agents contributed to this decision?">Which agents contributed?</button>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-bottom:18px;">
+    <div class="panel-title">🔗 Collaborative Reasoning Workflow</div>
+    <div class="flow" id="flowRow"></div>
+  </div>
+</section>
+
+<section class="tight" id="agentSection">
+  <div class="board">
+    <div class="panel">
+      <div class="panel-title">🧠 Specialized Agents <span style="font-weight:400;color:var(--text-dimmer);font-size:10.5px;font-family:var(--mono);">(tap ⓘ for details)</span></div>
+      <div id="agentList"></div>
+    </div>
+
+    <div class="panel" id="mapSection">
+      <div class="panel-title">🗺️ Interactive Marine Map</div>
+      <div id="map"></div>
+      <div class="layer-toggles" id="layerToggles"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>📋 Evidence-Based Response</span>
+        <button class="export-btn" id="exportBtn">⭳ Export Report</button>
+      </div>
+      <div id="evidencePanel"></div>
+    </div>
+  </div>
+
+  <div class="board" style="grid-template-columns:1fr 1fr;margin-top:18px;">
+    <div class="panel">
+      <div class="panel-title">🤝 Agent Collaboration &amp; Conflict Resolution</div>
+      <div id="conflictPanel"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🗂️ Query &amp; Agent Execution Log</div>
+      <div id="logPanel"></div>
+    </div>
+  </div>
+</section>
+
+<section class="tight" id="alertSection">
+  <div class="section-head"><h2>🚨 Smart Alerts</h2><span class="tag">AUTO-GENERATED FROM AGENT FINDINGS</span></div>
+  <div class="filter-row" id="alertFilters"></div>
+  <div id="alertList" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;"></div>
+</section>
+
+<section class="tight" id="twinSection">
+  <div class="section-head"><h2>📈 7-Day Ecosystem Risk Outlook</h2><span class="tag">TIME-SERIES FORECAST</span></div>
+  <div class="panel">
+    <p class="subtitle" style="margin:0;">Projected composite risk score for the selected scenario, produced conceptually by the forecasting model feeding the reasoning engine.</p>
+    <div class="forecast-wrap" id="forecastChart"></div>
+    <div class="forecast-legend">
+      <span><i style="background:var(--kelp)"></i>Low</span>
+      <span><i style="background:var(--amber)"></i>Medium</span>
+      <span><i style="background:var(--coral)"></i>High</span>
+      <span><i style="background:var(--crit)"></i>Critical</span>
+    </div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="section-head"><h2>🌐 Marine Digital Twin — What-If Analysis</h2><span class="tag">SCENARIO SIMULATION</span></div>
+  <div class="panel">
+    <div class="twin-grid">
+      <div>
+        <p class="subtitle" style="margin:0 0 4px;">Adjust simulated sea-surface temperature change to explore projected ecosystem impact. This is a simplified conceptual simulation, not a live forecast.</p>
+        <div class="slider-row">
+          <label>SEA TEMPERATURE CHANGE <span id="tempVal">+0.0°C</span></label>
+          <input type="range" id="tempSlider" min="-20" max="50" value="0">
+        </div>
+        <div class="slider-row">
+          <label>SIMULATED DURATION <span id="durVal">7 days</span></label>
+          <input type="range" id="durSlider" min="1" max="60" value="7">
+        </div>
+      </div>
+      <div class="impact-grid" id="impactGrid"></div>
+    </div>
+  </div>
+</section>
+
+<section class="tight">
+  <div class="section-head"><h2>⚖️ Scenario Comparison</h2><span class="tag">SIDE-BY-SIDE</span></div>
+  <div class="panel">
+    <p class="subtitle" style="margin:0;">How the same six agents assess the region differently across all three demo scenarios.</p>
+    <div style="overflow-x:auto;"><table class="compare-table" id="compareTable"></table></div>
+  </div>
+</section>
+
+<section class="tight" id="ecoSection">
+  <div class="section-head"><h2>♻️ Continuous Learning Loop</h2><span class="tag">CONCEPTUAL</span></div>
+  <div class="panel">
+    <div class="cl-flow">
+      <div class="cl-node">📥 Historical Observations &amp; Predictions</div><span class="flow-arrow">→</span>
+      <div class="cl-node">🧠 Agent Analysis</div><span class="flow-arrow">→</span>
+      <div class="cl-node">✅ Master Agent Decision</div><span class="flow-arrow">→</span>
+      <div class="cl-node">🗣️ User Feedback</div><span class="flow-arrow">→</span>
+      <div class="cl-node">📈 Model &amp; Confidence Learning</div>
+    </div>
+    <div class="fb-row">
+      <button class="fb-btn" id="fbUp">👍 Assessment was accurate</button>
+      <button class="fb-btn" id="fbDown">👎 Assessment needs review</button>
+    </div>
+    <div class="fb-count" id="fbCount">0 accurate · 0 flagged — feeds the retraining queue conceptually</div>
+  </div>
+</section>
+
+<footer>
+  <b>Architecture note:</b> This artifact demonstrates the full VARUNA user experience — master-agent orchestration, six specialized agents, collaborative evidence fusion, explainable risk assessment, GIS visualization, alerts, and a digital-twin what-if simulator — running client-side against realistic demo data, exactly as Demo Mode is meant to behave when live marine APIs are unavailable.
+  <div class="arch-note">
+  In the full system, this front end sits on a Python/FastAPI backend with dedicated <b>agents/</b> (master, ocean, satellite, fisheries, coral, vessel, weather), a <b>reasoning/</b> layer (evidence fusion, ecosystem reasoning, confidence engine), and an <b>ml/</b> layer (time-series forecasting, XGBoost risk classification, Isolation Forest anomaly detection, LLM+RAG for the assistant). Data persists in PostgreSQL + PostGIS + pgvector, with Redis for agent-state caching, and the same REST contract used here (<span style="font-family:var(--mono)">/query, /marine/conditions, /marine/risk, /marine/agents, /marine/agent-insights, /marine/evidence, /marine/alerts, /marine/predictions</span>) is what this page would call once connected.
+  </div>
+</footer>
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<div class="modal-overlay" id="agentModal">
+  <div class="modal-box">
+    <button class="modal-close" id="modalClose">×</button>
+    <h3 id="modalTitle"></h3>
+    <div style="font-size:12px;color:var(--text-dimmer);font-family:var(--mono);" id="modalSub"></div>
+    <div class="modal-section">
+      <div class="k">Responsibilities</div>
+      <ul id="modalResp"></ul>
+    </div>
+    <div class="modal-section">
+      <div class="k">AI / ML Tooling</div>
+      <div id="modalTool" style="font-size:12.5px;color:var(--text-dim);"></div>
+    </div>
+    <div class="modal-section">
+      <div class="k">Historical Reliability</div>
+      <div id="modalReliability" style="font-size:12.5px;color:var(--text-dim);"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+/* ============================= DATA LAYER ============================= */
+const AGENTS = [
+  {id:'ocean', name:'Ocean Intelligence', emoji:'🌊', color:'#5b9fd6'},
+  {id:'satellite', name:'Satellite Observation', emoji:'🛰️', color:'#9b8cf2'},
+  {id:'fisheries', name:'Fisheries Intelligence', emoji:'🎣', color:'#8fd694'},
+  {id:'coral', name:'Coral Health', emoji:'🪸', color:'#ff8a5c'},
+  {id:'vessel', name:'Vessel Intelligence', emoji:'🚢', color:'#f2b84b'},
+  {id:'weather', name:'Weather Intelligence', emoji:'🌦️', color:'#2dd4c4'},
+];
+
+const SCENARIOS = {
+  normal: {
+    label:'Normal Conditions', risk:'LOW', confidence:91, status:'STABLE',
+    activeAlerts:1,
+    findings:{
+      ocean:{finding:'SST and wave height within seasonal norms; currents stable.', evidence:['SST 27.8°C, within ±0.4°C of climatology','Wave height 0.9 m, calm sea state','No sea-level anomalies detected'], confidence:93, trend:[18,20,17,19,21,18,16]},
+      satellite:{finding:'Ocean colour and chlorophyll patterns consistent with historical baseline.', evidence:['Chlorophyll-a 0.3 mg/m³, typical for season','No abnormal spatial patterns in last 3 passes'], confidence:90, trend:[15,16,14,17,15,13,14]},
+      fisheries:{finding:'Productivity indicators support normal fishing conditions.', evidence:['Productivity index steady at 0.68','No adverse environmental shifts recorded'], confidence:88, trend:[65,67,64,68,66,69,68]},
+      coral:{finding:'No significant thermal stress on reef zones.', evidence:['Degree Heating Weeks: 0.4 (low)','Historical comparison shows stable reef condition'], confidence:92, trend:[8,9,7,8,10,8,7]},
+      vessel:{finding:'Vessel density and movement patterns are routine.', evidence:['142 active vessels, typical daily count','No abnormal clustering detected'], confidence:85, trend:[70,72,68,74,71,73,72]},
+      weather:{finding:'Wind and pressure conditions calm, no storm signatures.', evidence:['Wind 12 km/h, pressure 1011 hPa','No cyclone precursors in satellite loop'], confidence:94, trend:[10,12,9,11,10,8,9]},
+    },
+    alerts:[{sev:'LOW',title:'Routine Monitoring Advisory',loc:'Chennai coastal shelf',body:'Conditions nominal. Continue standard observation cadence.',agents:['Ocean','Weather']}],
+    recommendation:'Maintain standard monitoring cadence. No advisories required at this time.',
+    conflicts:[],
+    forecast:[14,15,13,16,15,14,16]
+  },
+  stress: {
+    label:'Ecosystem Stress', risk:'HIGH', confidence:87, status:'DEGRADING',
+    activeAlerts:3,
+    findings:{
+      ocean:{finding:'Sea surface temperature anomaly detected above regional threshold.', evidence:['SST anomaly of +1.8°C over 5-day mean','Reduced vertical mixing observed','Localized sea-level rise of 6 cm'], confidence:89, trend:[22,28,34,41,47,52,58]},
+      satellite:{finding:'Environmental change detected in ocean colour signature.', evidence:['Chlorophyll-a dropped 22% week-on-week','Spatial pattern shift near shelf break'], confidence:85, trend:[18,24,29,35,40,44,49]},
+      fisheries:{finding:'Productivity indicators declining, ecosystem stress likely affecting stocks.', evidence:['Productivity index down to 0.41','Pattern consistent with past stress episodes'], confidence:82, trend:[64,58,52,48,44,42,41]},
+      coral:{finding:'Elevated coral stress indicators; early bleaching risk.', evidence:['Degree Heating Weeks: 3.1 (elevated)','Thermal stress trending upward over 10 days'], confidence:88, trend:[20,26,33,40,48,55,61]},
+      vessel:{finding:'Vessel activity shifting away from historically productive zones.', evidence:['18% drop in fishing-vessel density near shelf','Movement pattern suggests avoidance behaviour'], confidence:79, trend:[70,66,61,58,54,51,50]},
+      weather:{finding:'Weather conditions compounding ocean stress via reduced wind mixing.', evidence:['Wind speeds 40% below seasonal average','Prolonged high-pressure system overhead'], confidence:86, trend:[12,18,24,30,35,39,43]},
+    },
+    alerts:[
+      {sev:'HIGH',title:'Marine Ecosystem Stress Advisory',loc:'Chennai–Puducherry shelf',body:'Multiple agents report compounding stress indicators. Increase monitoring frequency.',agents:['Ocean','Coral Health','Satellite']},
+      {sev:'MEDIUM',title:'Coral Bleaching Watch',loc:'Nearshore reef zone',body:'Degree heating weeks trending toward bleaching threshold.',agents:['Coral Health']},
+      {sev:'MEDIUM',title:'Fisheries Productivity Decline',loc:'Regional shelf waters',body:'Productivity index down significantly; advise fisheries authorities.',agents:['Fisheries']},
+    ],
+    recommendation:'Increase monitoring frequency, issue ecosystem stress advisory to fisheries authorities, and flag reef zones for bleaching watch.',
+    conflicts:[
+      {a:'Vessel Intelligence', b:'Fisheries Intelligence', issue:'Vessel Agent reports fleets moving toward the shelf edge, while Fisheries Agent reports declining productivity in that same zone — an apparent contradiction in where activity is concentrating.', resolution:'Master Agent weighted Fisheries Agent higher (confidence 82% vs. contextual read of vessel telemetry) and reconciled the signals: vessels are scouting adjacent grounds after productivity dropped at their usual zone, not evidence of stable conditions there.'},
+      {a:'Ocean Intelligence', b:'Satellite Observation', issue:'Ocean Agent shows a +1.8°C anomaly building steadily, while Satellite Agent\'s chlorophyll drop is sharper than the thermal trend alone would predict.', resolution:'Evidence fusion attributed the excess chlorophyll decline to reduced vertical mixing (Ocean Agent finding), treating the two agents as consistent once mixing dynamics were factored in rather than conflicting.'}
+    ],
+    forecast:[38,44,50,55,60,64,67]
+  },
+  severe: {
+    label:'Severe Weather Warning', risk:'CRITICAL', confidence:94, status:'CRITICAL',
+    activeAlerts:4,
+    findings:{
+      ocean:{finding:'Rapid ocean response to incoming storm system; wave heights rising sharply.', evidence:['Significant wave height up to 4.6 m','Storm surge risk elevated along coast','Current speed doubled in shelf zone'], confidence:95, trend:[30,38,47,56,66,75,84]},
+      satellite:{finding:'Satellite imagery confirms deep convective cloud band approaching coast.', evidence:['Cyclonic cloud signature detected','Rapid pressure drop visible in sequential passes'], confidence:96, trend:[25,34,44,55,65,74,83]},
+      fisheries:{finding:'Conditions unsafe for fishing operations; productivity assessment paused.', evidence:['Sea-state unsafe for small craft','Advisory precedence over productivity analysis'], confidence:90, trend:[40,36,30,25,20,18,15]},
+      coral:{finding:'Mechanical stress risk from wave action compounding existing thermal stress.', evidence:['Wave-driven stress added to elevated DHW baseline'], confidence:83, trend:[35,42,49,56,62,68,73]},
+      vessel:{finding:'Vessel movement indicates active return-to-harbour behaviour.', evidence:['62% of tracked vessels moving toward port','Fishing fleet largely returned to harbour'], confidence:91, trend:[45,55,64,72,79,84,88]},
+      weather:{finding:'Cyclone-track weather system confirmed with high-confidence storm alert.', evidence:['Sustained winds 95 km/h and rising','Central pressure 978 hPa and falling','Landfall projected within 36 hours'], confidence:97, trend:[28,38,49,60,71,81,90]},
+    },
+    alerts:[
+      {sev:'CRITICAL',title:'Cyclone Landfall Warning',loc:'Full coastal sector',body:'High-confidence storm track with landfall in ~36 hours. Issue evacuation advisory for low-lying areas.',agents:['Weather','Ocean','Satellite']},
+      {sev:'HIGH',title:'High Wave Alert',loc:'Nearshore & shelf waters',body:'Significant wave heights exceeding 4 m; all vessels advised to return to harbour.',agents:['Ocean','Vessel']},
+      {sev:'HIGH',title:'Storm Surge Risk',loc:'Low-lying coastal zone',body:'Elevated surge risk compounding high tide window.',agents:['Ocean','Weather']},
+      {sev:'MEDIUM',title:'Reef Mechanical Stress',loc:'Nearshore reef zone',body:'Wave action adding physical stress atop existing thermal stress.',agents:['Coral Health']},
+    ],
+    recommendation:'Issue cyclone landfall warning, direct all vessels to harbour, and activate coastal evacuation protocol for at-risk low-lying zones.',
+    conflicts:[
+      {a:'Fisheries Intelligence', b:'Vessel Intelligence', issue:'Fisheries Agent has paused productivity scoring entirely, while Vessel Agent continues to report detailed fleet telemetry — creating an apparent gap in ecosystem coverage.', resolution:'Master Agent treats this as expected precedence, not conflict: safety-critical vessel tracking stays active while productivity analysis is correctly suppressed under unsafe sea-state, per the reasoning engine\'s priority rules.'}
+    ],
+    forecast:[55,62,69,76,82,87,91]
+  }
+};
+
+const LOCATIONS = [
+  {id:'chennai', name:'Chennai Coast', lat:13.08, lng:80.29, zoom:8, riskShift:0},
+  {id:'puducherry', name:'Puducherry Shelf', lat:11.94, lng:79.83, zoom:9, riskShift:-2},
+  {id:'visakhapatnam', name:'Visakhapatnam Coast', lat:17.68, lng:83.30, zoom:8, riskShift:3},
+  {id:'kochi', name:'Kochi / Arabian Sea', lat:9.93, lng:76.26, zoom:8, riskShift:-4},
+];
+let currentLocation = LOCATIONS[0];
+
+const AGENT_META = {
+  ocean:{resp:['Sea surface temperature analysis','Wave & current analysis','Salinity and sea-level tracking','Ocean condition forecasting'], tool:'Time-series forecasting models for trend prediction, feeding anomaly thresholds into the risk engine.', reliability:'91% agreement with verified buoy readings over the last 30 simulated days.'},
+  satellite:{resp:['Satellite ocean-colour analysis','Chlorophyll concentration tracking','Spatial pattern & environmental change detection'], tool:'Remote-sensing pattern analysis with anomaly scoring via Isolation Forest on colour/chlorophyll features.', reliability:'88% agreement with historical pass-to-pass validation.'},
+  fisheries:{resp:['Marine productivity analysis','Chlorophyll-based productivity indicators','Historical environmental pattern comparison'], tool:'XGBoost classifier trained on productivity indicators and environmental covariates.', reliability:'85% agreement with regional catch-report baselines.'},
+  coral:{resp:['Sea-temperature stress analysis','Bleaching risk indicators','Historical ecosystem comparison'], tool:'Rule-based Degree Heating Weeks thresholding combined with an ML stress classifier.', reliability:'90% agreement with reef-monitoring station reports.'},
+  vessel:{resp:['Vessel activity & density analysis','Maritime movement pattern detection','Spatial clustering analysis'], tool:'Density-based clustering over AIS-style movement data to flag abnormal patterns.', reliability:'87% agreement with port-authority traffic logs.'},
+  weather:{resp:['Wind, rainfall & pressure analysis','Storm and cyclone detection','Marine weather forecasting'], tool:'Time-series forecasting plus rule-based cyclone-signature detection.', reliability:'94% agreement with verified meteorological advisories.'}
+};
+
+let queryLog = [];
+
+const MAP_POINTS = {
+  ocean:[{lat:13.35,lng:80.55,label:'SST anomaly buoy'}],
+  satellite:[{lat:12.85,lng:80.45,label:'Ocean-colour pass footprint'}],
+  fisheries:[{lat:12.5,lng:80.3,label:'Productivity monitoring zone'}],
+  coral:[{lat:12.02,lng:80.05,label:'Reef stress zone'}],
+  vessel:[{lat:13.08,lng:80.29,label:'Vessel density cluster'},{lat:12.6,lng:80.15,label:'Vessel density cluster'}],
+  weather:[{lat:13.6,lng:81.0,label:'Storm-track waypoint'}]
+};
+
+const INTENT_KEYWORDS = {
+  ocean:['ocean','current','wave','sst','temperature','sea level','salinity'],
+  satellite:['satellite','chlorophyll','remote sensing','colour','color','image'],
+  fisheries:['fish','fisheries','catch','productivity'],
+  coral:['coral','reef','bleaching'],
+  vessel:['vessel','ship','boat','traffic','maritime'],
+  weather:['storm','cyclone','wind','rain','weather','pressure']
+};
+
+/* ============================= STATE ============================= */
+let currentScenario = 'normal';
+let feedback = {up:0, down:0};
+let map, markersLayer;
+const layerState = {ocean:true, weather:true, risk:true, satellite:false, vessel:false, coralzones:true};
+
+/* ============================= INIT ============================= */
+function scn(){ return SCENARIOS[currentScenario]; }
+
+function renderStatusStrip(){
+  const s = scn();
+  const el = document.getElementById('statusStrip');
+  el.innerHTML = `
+    <div class="status-cell"><div class="k">Ecosystem Status</div><div class="v">${s.status}</div><div class="sub">Overall assessment</div></div>
+    <div class="status-cell"><div class="k">Risk Level</div><div class="v risk-${s.risk}">${s.risk}</div><div class="sub">Master Agent classification</div></div>
+    <div class="status-cell"><div class="k">Confidence</div><div class="v">${s.confidence}%</div><div class="sub">Evidence-weighted</div></div>
+    <div class="status-cell"><div class="k">Active Alerts</div><div class="v">${s.activeAlerts}</div><div class="sub">See Smart Alerts</div></div>
+    <div class="status-cell"><div class="k">Active Agents</div><div class="v">${AGENTS.length}/${AGENTS.length}</div><div class="sub">All specialized agents online</div></div>
+  `;
+}
+
+function sparklinePath(values, color){
+  const w=100, h=26, pad=2;
+  const min=Math.min(...values), max=Math.max(...values);
+  const range = (max-min)||1;
+  const pts = values.map((v,i)=>{
+    const x = pad + (i/(values.length-1))*(w-pad*2);
+    const y = h-pad - ((v-min)/range)*(h-pad*2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg class="sparkline" viewBox="0 0 ${w} ${h}" width="100" height="26"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function renderAgents(selected){
+  selected = selected || AGENTS.map(a=>a.id);
+  const s = scn();
+  const el = document.getElementById('agentList');
+  el.innerHTML = AGENTS.map(a=>{
+    const f = s.findings[a.id];
+    const isSel = selected.includes(a.id);
+    return `
+    <div class="agent-card ${isSel?'selected':''}" id="agent-${a.id}">
+      <div class="agent-top">
+        <div class="agent-name"><span class="agent-emoji">${a.emoji}</span>${a.name}<button class="info-btn" data-agent="${a.id}" title="Agent details">ⓘ</button></div>
+        <div class="agent-status st-idle" id="status-${a.id}">Idle</div>
+      </div>
+      <div class="agent-finding" id="finding-${a.id}"></div>
+      <div class="agent-conf-row">
+        <div class="conf-bar"><div class="conf-fill" id="conf-${a.id}" style="width:0%;"></div></div>
+        <div class="conf-num" id="confnum-${a.id}">--</div>
+      </div>
+      ${sparklinePath(f.trend, a.color)}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.info-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=> openAgentModal(btn.dataset.agent));
+  });
+}
+
+function populateAgentsStatic(){
+  const s = scn();
+  AGENTS.forEach(a=>{
+    const f = s.findings[a.id];
+    const findingEl = document.getElementById(`finding-${a.id}`);
+    const confEl = document.getElementById(`conf-${a.id}`);
+    const confNumEl = document.getElementById(`confnum-${a.id}`);
+    const statusEl = document.getElementById(`status-${a.id}`);
+    if(!findingEl) return;
+    findingEl.textContent = f.finding;
+    confEl.style.width = f.confidence+'%';
+    confNumEl.textContent = f.confidence+'%';
+    statusEl.className = 'agent-status st-done';
+    statusEl.textContent = 'Done';
+    document.getElementById(`agent-${a.id}`).classList.remove('selected','thinking');
+  });
+}
+
+function renderFlow(activeIdx){
+  const steps = ['User Query','Master Agent','Agent Selection','Evidence Sharing','Collaborative Reasoning','Final Assessment'];
+  const el = document.getElementById('flowRow');
+  el.innerHTML = steps.map((label,i)=>{
+    const cls = activeIdx===undefined ? '' : (i<activeIdx?'done':(i===activeIdx?'active':''));
+    const arrow = i<steps.length-1 ? '<span class="flow-arrow">→</span>' : '';
+    return `<div class="flow-node ${cls}">${label}</div>${arrow}`;
+  }).join('');
+}
+
+let alertFilter = 'ALL';
+function renderAlertFilters(){
+  const sevs = ['ALL','LOW','MEDIUM','HIGH','CRITICAL'];
+  const el = document.getElementById('alertFilters');
+  el.innerHTML = sevs.map(sv=>`<button class="filter-pill ${alertFilter===sv?'active':''}" data-sev="${sv}">${sv}</button>`).join('');
+  el.querySelectorAll('.filter-pill').forEach(b=>{
+    b.addEventListener('click', ()=>{ alertFilter=b.dataset.sev; renderAlertFilters(); renderAlerts(); });
+  });
+}
+
+function renderAlerts(){
+  const s = scn();
+  const el = document.getElementById('alertList');
+  const list = alertFilter==='ALL' ? s.alerts : s.alerts.filter(a=>a.sev===alertFilter);
+  if(list.length===0){ el.innerHTML = `<div class="log-empty">No ${alertFilter.toLowerCase()} severity alerts in this scenario.</div>`; return; }
+  el.innerHTML = list.map(a=>`
+    <div class="alert-card ${a.sev}">
+      <div class="alert-top"><span>${a.title}</span><span class="risk-${a.sev}">${a.sev}</span></div>
+      <div class="alert-meta">${a.loc} · ${new Date().toLocaleString()}</div>
+      <div class="alert-body">${a.body}</div>
+      <div class="contrib-chips">${a.agents.map(x=>`<span class="chip on">${x}</span>`).join('')}</div>
+    </div>
+  `).join('');
+}
+
+function renderEvidencePanel(selectedIds){
+  const s = scn();
+  selectedIds = selectedIds || AGENTS.map(a=>a.id);
+  const evidenceLines = [];
+  selectedIds.forEach(id=>{
+    const f = s.findings[id];
+    const agent = AGENTS.find(a=>a.id===id);
+    f.evidence.forEach(e=> evidenceLines.push(`${agent.emoji} ${e}`));
+  });
+  const shiftedConf = Math.max(1, Math.min(99, s.confidence + currentLocation.riskShift));
+  const el = document.getElementById('evidencePanel');
+  el.innerHTML = `
+    <div class="assessment-badge assessment-${s.risk}">${s.status} — RISK: ${s.risk}</div>
+    <div class="ev-row"><span class="k">Region</span><span>${currentLocation.name}</span></div>
+    <div class="ev-row"><span class="k">Confidence Score</span><span>${shiftedConf}%</span></div>
+    <div class="ev-row"><span class="k">Contributing Agents</span></div>
+    <div class="contrib-chips">${selectedIds.map(id=>{
+      const a = AGENTS.find(x=>x.id===id); return `<span class="chip on">${a.emoji} ${a.name}</span>`;
+    }).join('')}</div>
+    <div class="ev-row" style="border:none;padding-bottom:2px;"><span class="k">Supporting Evidence</span></div>
+    <ul class="evlist">${evidenceLines.map(e=>`<li>${e}</li>`).join('')}</ul>
+    <div class="actions-box"><b>Recommended Action:</b> ${s.recommendation}</div>
+  `;
+}
+
+/* ---------- Map ---------- */
+function initMap(){
+  map = L.map('map', {zoomControl:true, attributionControl:true}).setView([currentLocation.lat,currentLocation.lng], currentLocation.zoom);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution:'&copy; OpenStreetMap &copy; CARTO', maxZoom:12
+  }).addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+  drawMapLayers();
+}
+
+const LAYER_META = {
+  ocean:{color:'#5b9fd6', label:'Ocean Conditions'},
+  weather:{color:'#2dd4c4', label:'Weather'},
+  risk:{color:'#ef5b5b', label:'Risk Zones'},
+  satellite:{color:'#9b8cf2', label:'Satellite Observations'},
+  vessel:{color:'#f2b84b', label:'Vessel Activity'},
+  coralzones:{color:'#ff8a5c', label:'Ecosystem Stress Zones'}
+};
+
+function renderLayerToggles(){
+  const el = document.getElementById('layerToggles');
+  el.innerHTML = Object.keys(LAYER_META).map(k=>{
+    const m = LAYER_META[k];
+    return `<label class="ltoggle ${layerState[k]?'on':''}" data-layer="${k}">
+      <input type="checkbox" ${layerState[k]?'checked':''}/> <span class="swatch" style="background:${m.color}"></span>${m.label}
+    </label>`;
+  }).join('');
+  el.querySelectorAll('.ltoggle').forEach(t=>{
+    t.addEventListener('click', (e)=>{
+      e.preventDefault();
+      const k = t.dataset.layer;
+      layerState[k] = !layerState[k];
+      t.classList.toggle('on', layerState[k]);
+      t.querySelector('input').checked = layerState[k];
+      drawMapLayers();
+    });
+  });
+}
+
+function drawMapLayers(){
+  if(!map) return;
+  markersLayer.clearLayers();
+  const s = scn();
+  const riskColor = {LOW:'#8fd694',MEDIUM:'#f2b84b',HIGH:'#ff8a5c',CRITICAL:'#ef5b5b'}[s.risk];
+
+  if(layerState.risk){
+    L.circle([currentLocation.lat,currentLocation.lng], {radius:60000, color:riskColor, weight:1.5, fillOpacity:0.08}).addTo(markersLayer)
+      .bindPopup(`<b>Regional risk zone — ${currentLocation.name}</b><br>Risk level: ${s.risk}<br>Confidence: ${Math.max(1,Math.min(99,s.confidence+currentLocation.riskShift))}%`);
+  }
+  if(layerState.ocean){
+    MAP_POINTS.ocean.forEach(p=> L.circleMarker([p.lat,p.lng],{radius:7,color:LAYER_META.ocean.color,fillOpacity:0.85}).addTo(markersLayer).bindPopup(`<b>Ocean Agent</b><br>${p.label}<br>${s.findings.ocean.finding}`));
+  }
+  if(layerState.weather){
+    MAP_POINTS.weather.forEach(p=> L.circleMarker([p.lat,p.lng],{radius:7,color:LAYER_META.weather.color,fillOpacity:0.85}).addTo(markersLayer).bindPopup(`<b>Weather Agent</b><br>${p.label}<br>${s.findings.weather.finding}`));
+  }
+  if(layerState.satellite){
+    MAP_POINTS.satellite.forEach(p=> L.circleMarker([p.lat,p.lng],{radius:7,color:LAYER_META.satellite.color,fillOpacity:0.85}).addTo(markersLayer).bindPopup(`<b>Satellite Agent</b><br>${p.label}<br>${s.findings.satellite.finding}`));
+  }
+  if(layerState.vessel){
+    MAP_POINTS.vessel.forEach(p=> L.circleMarker([p.lat,p.lng],{radius:6,color:LAYER_META.vessel.color,fillOpacity:0.85}).addTo(markersLayer).bindPopup(`<b>Vessel Agent</b><br>${p.label}<br>${s.findings.vessel.finding}`));
+  }
+  if(layerState.coralzones){
+    MAP_POINTS.coral.forEach(p=> L.circleMarker([p.lat,p.lng],{radius:8,color:LAYER_META.coralzones.color,fillOpacity:0.7}).addTo(markersLayer).bindPopup(`<b>Coral Health Agent</b><br>${p.label}<br>${s.findings.coral.finding}`));
+  }
+}
+
+/* ---------- Master Agent orchestration animation ---------- */
+let running = false;
+function interpretIntent(query){
+  const q = query.toLowerCase();
+  let matched = [];
+  Object.keys(INTENT_KEYWORDS).forEach(agentId=>{
+    if(INTENT_KEYWORDS[agentId].some(kw=>q.includes(kw))) matched.push(agentId);
+  });
+  if(q.includes('safe') || q.includes('stress') || matched.length===0) {
+    matched = AGENTS.map(a=>a.id);
+  }
+  return [...new Set(matched)];
+}
+
+async function runOrchestration(query){
+  if(running) return;
+  running = true;
+  document.getElementById('runQueryBtn').disabled = true;
+  const selected = interpretIntent(query || '');
+  renderAgents(selected);
+  populateAgentsStatic();
+  selected.forEach(id=>{
+    document.getElementById(`finding-${id}`).textContent = '';
+    document.getElementById(`conf-${id}`).style.width = '0%';
+    document.getElementById(`confnum-${id}`).textContent = '--';
+    document.getElementById(`status-${id}`).className = 'agent-status st-idle';
+    document.getElementById(`status-${id}`).textContent = 'Idle';
+  });
+  renderFlow(0);
+  await sleep(400);
+  renderFlow(1);
+  await sleep(500);
+  renderFlow(2);
+  selected.forEach(id=>{ document.getElementById(`agent-${id}`).classList.add('thinking'); document.getElementById(`status-${id}`).className='agent-status st-thinking'; document.getElementById(`status-${id}`).textContent='Analysing'; });
+  await sleep(600);
+
+  const s = scn();
+  for(const id of selected){
+    const f = s.findings[id];
+    document.getElementById(`finding-${id}`).textContent = f.finding;
+    document.getElementById(`conf-${id}`).style.width = f.confidence+'%';
+    document.getElementById(`confnum-${id}`).textContent = f.confidence+'%';
+    document.getElementById(`status-${id}`).className='agent-status st-done';
+    document.getElementById(`status-${id}`).textContent='Done';
+    document.getElementById(`agent-${id}`).classList.remove('thinking');
+    await sleep(280);
+  }
+
+  renderFlow(3);
+  await sleep(500);
+  renderFlow(4);
+  await sleep(600);
+  renderFlow(5);
+  renderEvidencePanel(selected);
+  await sleep(300);
+  renderFlow(6);
+
+  queryLog.push({
+    time: new Date().toLocaleTimeString('en-IN',{hour12:false}),
+    query: query || 'Is this region safe right now?',
+    agents: selected,
+    risk: s.risk
+  });
+  renderQueryLog();
+
+  running = false;
+  document.getElementById('runQueryBtn').disabled = false;
+}
+
+function sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ---------- Digital twin what-if ---------- */
+function computeImpact(){
+  const tempTenths = parseInt(document.getElementById('tempSlider').value,10); // -20..50 => -2.0..+5.0
+  const temp = tempTenths/10;
+  const days = parseInt(document.getElementById('durSlider').value,10);
+  document.getElementById('tempVal').textContent = (temp>=0?'+':'')+temp.toFixed(1)+'°C';
+  document.getElementById('durVal').textContent = days+' day'+(days>1?'s':'');
+
+  const bleachRisk = Math.max(0, Math.min(100, Math.round((temp*14 + days*0.6))));
+  const productivityDrop = Math.max(-20, Math.min(70, Math.round(temp*9 + days*0.3)));
+  const stormLikelihood = Math.max(0, Math.min(100, Math.round(temp>0 ? temp*11 + days*0.4 : 5)));
+  let overall = 'LOW';
+  const score = bleachRisk*0.4 + productivityDrop*0.35 + stormLikelihood*0.25;
+  if(score>60) overall='CRITICAL'; else if(score>38) overall='HIGH'; else if(score>18) overall='MEDIUM';
+
+  document.getElementById('impactGrid').innerHTML = `
+    <div class="impact-cell"><div class="k">CORAL BLEACHING RISK</div><div class="v" style="color:${bleachRisk>55?'var(--crit)':bleachRisk>30?'var(--coral)':'var(--kelp)'}">${bleachRisk}%</div></div>
+    <div class="impact-cell"><div class="k">FISHERIES PRODUCTIVITY IMPACT</div><div class="v" style="color:${productivityDrop>35?'var(--crit)':productivityDrop>15?'var(--coral)':'var(--kelp)'}">${productivityDrop>=0?'-':'+'}${Math.abs(productivityDrop)}%</div></div>
+    <div class="impact-cell"><div class="k">STORM-SIGNATURE LIKELIHOOD</div><div class="v" style="color:${stormLikelihood>55?'var(--crit)':stormLikelihood>25?'var(--coral)':'var(--kelp)'}">${stormLikelihood}%</div></div>
+    <div class="impact-cell"><div class="k">PROJECTED ECOSYSTEM STATE</div><div class="v risk-${overall}">${overall}</div></div>
+  `;
+}
+
+/* ---------- Conflict resolution ---------- */
+function renderConflicts(){
+  const s = scn();
+  const el = document.getElementById('conflictPanel');
+  if(!s.conflicts || s.conflicts.length===0){
+    el.innerHTML = `<div class="no-conflicts">✅ No conflicting signals detected between agents in this scenario — all findings are mutually consistent.</div>`;
+    return;
+  }
+  el.innerHTML = s.conflicts.map(c=>`
+    <div class="conflict-card">
+      <div class="conflict-title">⚠️ ${c.a} ↔ ${c.b}</div>
+      <div class="conflict-body">${c.issue}</div>
+      <div class="conflict-resolution"><b>Master Agent resolution:</b> ${c.resolution}</div>
+    </div>
+  `).join('');
+}
+
+/* ---------- 7-day forecast chart ---------- */
+function renderForecastChart(){
+  const s = scn();
+  const values = s.forecast;
+  const w=680, h=180, padL=30, padR=10, padT=14, padB=26;
+  const min=0, max=100;
+  const stepX = (w-padL-padR)/(values.length-1);
+  const colorFor = v => v>75?'var(--crit)':v>55?'var(--coral)':v>30?'var(--amber)':'var(--kelp)';
+  const pts = values.map((v,i)=>{
+    const x = padL + i*stepX;
+    const y = padT + (h-padT-padB) * (1 - (v-min)/(max-min));
+    return {x,y,v};
+  });
+  const linePts = pts.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const gridLines = [0,25,50,75,100].map(g=>{
+    const y = padT + (h-padT-padB)*(1-g/100);
+    return `<line x1="${padL}" y1="${y}" x2="${w-padR}" y2="${y}" stroke="var(--line-soft)" stroke-width="1"/><text x="4" y="${y+3}" font-size="9" fill="var(--text-dimmer)" font-family="var(--mono)">${g}</text>`;
+  }).join('');
+  const dayLabels = pts.map((p,i)=>`<text x="${p.x}" y="${h-6}" font-size="9" text-anchor="middle" fill="var(--text-dimmer)" font-family="var(--mono)">D+${i+1}</text>`).join('');
+  const dots = pts.map(p=>`<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${colorFor(p.v)}" stroke="var(--panel)" stroke-width="1.5"/>`).join('');
+  document.getElementById('forecastChart').innerHTML = `
+    <svg viewBox="0 0 ${w} ${h}" style="width:100%;height:auto;">
+      ${gridLines}
+      <polyline points="${linePts}" fill="none" stroke="var(--tide)" stroke-width="2"/>
+      ${dots}
+      ${dayLabels}
+    </svg>`;
+}
+
+/* ---------- Scenario comparison table ---------- */
+function renderCompareTable(){
+  const order = ['normal','stress','severe'];
+  const el = document.getElementById('compareTable');
+  let html = `<tr><th>Agent</th>${order.map(k=>`<th>${SCENARIOS[k].label}</th>`).join('')}</tr>`;
+  AGENTS.forEach(a=>{
+    html += `<tr><td>${a.emoji} ${a.name}</td>${order.map(k=>{
+      const f = SCENARIOS[k].findings[a.id];
+      return `<td class="num">${f.confidence}%</td>`;
+    }).join('')}</tr>`;
+  });
+  html += `<tr><td><b>Overall Risk</b></td>${order.map(k=>`<td class="risk-${SCENARIOS[k].risk}"><b>${SCENARIOS[k].risk}</b></td>`).join('')}</tr>`;
+  el.innerHTML = html;
+}
+
+/* ---------- Query / execution log ---------- */
+function renderQueryLog(){
+  const el = document.getElementById('logPanel');
+  if(queryLog.length===0){ el.innerHTML = `<div class="log-empty">No queries run yet this session. Ask VARUNA a question above to populate the execution log.</div>`; return; }
+  el.innerHTML = queryLog.slice().reverse().map(entry=>`
+    <div class="log-entry">
+      <div class="log-top"><span class="log-time">${entry.time}</span><span class="risk-${entry.risk}">${entry.risk}</span></div>
+      <div class="log-query">"${entry.query}"</div>
+      <div class="log-meta">${entry.agents.map(id=>{
+        const a = AGENTS.find(x=>x.id===id); return `<span class="chip on">${a.emoji}</span>`;
+      }).join('')}</div>
+    </div>
+  `).join('');
+}
+
+/* ---------- Toasts ---------- */
+function showToast(title, body, sev){
+  const stack = document.getElementById('toastStack');
+  const t = document.createElement('div');
+  t.className = `toast ${sev||''}`;
+  t.innerHTML = `<div class="tt">${title}</div><div>${body}</div>`;
+  stack.appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),320); }, 5000);
+}
+
+/* ---------- Agent detail modal ---------- */
+function openAgentModal(id){
+  const a = AGENTS.find(x=>x.id===id);
+  const meta = AGENT_META[id];
+  document.getElementById('modalTitle').innerHTML = `${a.emoji} ${a.name}`;
+  document.getElementById('modalSub').textContent = 'Specialized Agent · VARUNA Collaborative Reasoning Layer';
+  document.getElementById('modalResp').innerHTML = meta.resp.map(r=>`<li>${r}</li>`).join('');
+  document.getElementById('modalTool').textContent = meta.tool;
+  document.getElementById('modalReliability').textContent = meta.reliability;
+  document.getElementById('agentModal').classList.add('open');
+}
+document.getElementById('modalClose').addEventListener('click', ()=> document.getElementById('agentModal').classList.remove('open'));
+document.getElementById('agentModal').addEventListener('click', e=>{ if(e.target.id==='agentModal') e.currentTarget.classList.remove('open'); });
+
+/* ---------- Export report ---------- */
+function exportReport(){
+  const s = scn();
+  const lines = [];
+  lines.push('VARUNA — MARINE ECOSYSTEM ASSESSMENT REPORT');
+  lines.push('Generated: ' + new Date().toString());
+  lines.push('Region: ' + currentLocation.name);
+  lines.push('Scenario: ' + s.label);
+  lines.push('');
+  lines.push('ECOSYSTEM STATUS: ' + s.status);
+  lines.push('RISK LEVEL: ' + s.risk);
+  lines.push('CONFIDENCE: ' + Math.max(1,Math.min(99,s.confidence+currentLocation.riskShift)) + '%');
+  lines.push('');
+  lines.push('CONTRIBUTING AGENTS & FINDINGS:');
+  AGENTS.forEach(a=>{
+    const f = s.findings[a.id];
+    lines.push(`- ${a.name} (confidence ${f.confidence}%): ${f.finding}`);
+    f.evidence.forEach(e=> lines.push(`    · ${e}`));
+  });
+  lines.push('');
+  if(s.conflicts && s.conflicts.length){
+    lines.push('AGENT CONFLICTS RESOLVED BY MASTER AGENT:');
+    s.conflicts.forEach(c=> lines.push(`- ${c.a} vs ${c.b}: ${c.resolution}`));
+    lines.push('');
+  }
+  lines.push('RECOMMENDED ACTION: ' + s.recommendation);
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `varuna-assessment-${currentScenario}-${currentLocation.id}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+document.getElementById('exportBtn').addEventListener('click', exportReport);
+
+/* ---------- Theme toggle ---------- */
+document.getElementById('themeToggle').addEventListener('click', ()=>{
+  const isDark = document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  document.getElementById('themeToggle').textContent = isDark ? '🌙' : '☀️';
+});
+
+/* ---------- Location selector ---------- */
+function populateLocations(){
+  const el = document.getElementById('locSelect');
+  el.innerHTML = LOCATIONS.map(l=>`<option value="${l.id}">${l.name}</option>`).join('');
+  el.addEventListener('change', ()=>{
+    currentLocation = LOCATIONS.find(l=>l.id===el.value);
+    document.getElementById('regionLabel').textContent = `Region: ${currentLocation.name}`;
+    if(map) map.flyTo([currentLocation.lat,currentLocation.lng], currentLocation.zoom);
+    renderEvidencePanel();
+    drawMapLayers();
+  });
+}
+
+/* ============================= EVENTS ============================= */
+document.getElementById('mainNav').addEventListener('click', e=>{
+  if(e.target.tagName!=='BUTTON') return;
+  document.querySelectorAll('#mainNav button').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  const target = document.getElementById(e.target.dataset.target);
+  if(target) target.scrollIntoView({behavior:'smooth', block:'start'});
+});
+
+document.querySelectorAll('.spill').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.spill').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    currentScenario = btn.dataset.scn;
+    renderStatusStrip();
+    renderAgents();
+    populateAgentsStatic();
+    renderEvidencePanel();
+    renderAlerts();
+    drawMapLayers();
+    renderFlow();
+    renderConflicts();
+    renderForecastChart();
+    if(currentScenario==='severe'){
+      showToast('Cyclone Landfall Warning', 'Severe weather scenario active — Master Agent has escalated risk to CRITICAL.', 'CRITICAL');
+    } else if(currentScenario==='stress'){
+      showToast('Ecosystem Stress Advisory', 'Multiple agents report compounding stress indicators.', 'HIGH');
+    }
+  });
+});
+
+document.getElementById('runQueryBtn').addEventListener('click', ()=>{
+  const q = document.getElementById('queryInput').value.trim();
+  runOrchestration(q || 'Is this region safe right now?');
+});
+document.getElementById('queryInput').addEventListener('keydown', e=>{
+  if(e.key==='Enter') document.getElementById('runQueryBtn').click();
+});
+document.querySelectorAll('.preset').forEach(p=>{
+  p.addEventListener('click', ()=>{
+    document.getElementById('queryInput').value = p.dataset.q;
+    runOrchestration(p.dataset.q);
+  });
+});
+
+document.getElementById('tempSlider').addEventListener('input', computeImpact);
+document.getElementById('durSlider').addEventListener('input', computeImpact);
+
+document.getElementById('fbUp').addEventListener('click', ()=>{ feedback.up++; updateFb(); });
+document.getElementById('fbDown').addEventListener('click', ()=>{ feedback.down++; updateFb(); });
+function updateFb(){ document.getElementById('fbCount').textContent = `${feedback.up} accurate · ${feedback.down} flagged — feeds the retraining queue conceptually`; }
+
+function tickClock(){ document.getElementById('clockText').textContent = new Date().toLocaleTimeString('en-IN', {hour12:false}); }
+setInterval(tickClock, 1000); tickClock();
+
+/* ============================= BOOT ============================= */
+renderStatusStrip();
+renderAgents();
+populateAgentsStatic();
+renderFlow();
+renderEvidencePanel();
+renderAlertFilters();
+renderAlerts();
+renderLayerToggles();
+populateLocations();
+initMap();
+computeImpact();
+renderConflicts();
+renderForecastChart();
+renderCompareTable();
+renderQueryLog();
+</script>
+</body>
+</html>
