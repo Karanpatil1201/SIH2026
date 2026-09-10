@@ -9,9 +9,12 @@ import {
   WhatIfEnhancedRequest, WhatIfEnhancedResponse
 } from '../types';
 
-const API_BASE_URL = (typeof window !== 'undefined' && (window as any).__VARUNA_API_URL__) ||
+const rawBase: string = (typeof window !== 'undefined' && (window as any).__VARUNA_API_URL__) ||
   (import.meta as any).env?.VITE_API_URL ||
   '/api';
+
+const cleanBase = rawBase.replace(/\/+$/, '');
+const API_BASE_URL = cleanBase.endsWith('/api') ? cleanBase : (cleanBase === '' ? '/api' : `${cleanBase}/api`);
 
 const DEFAULT_TIMEOUT_MS = 90000;
 
