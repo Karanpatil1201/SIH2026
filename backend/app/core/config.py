@@ -19,12 +19,20 @@ class Settings(BaseSettings):
 
     OPENMETEO_BASE_URL: str = "https://marine-api.open-meteo.com/v1"
     OPENMETEO_WEATHER_URL: str = "https://api.open-meteo.com/v1"
+    COPERNICUS_API_URL: str = "https://data.marine.copernicus.eu/api"
     COPERNICUS_USERNAME: str = ""
     COPERNICUS_PASSWORD: str = ""
     GEMINI_API_KEY: str = ""
+    LLM_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.0-flash"
     
     DEFAULT_OPERATIONAL_MODE: str = "LIVE" # LIVE, DEMO, HYBRID
+    AGENT_ORCHESTRATION_MODE: str = "HYBRID" # COLLABORATIVE_DAG, HYBRID, LIVE, DEMO
+
+    # ── Map & Geolocation Defaults ───────────────────────────────────────────
+    MAP_DEFAULT_LAT: float = 18.9667
+    MAP_DEFAULT_LON: float = 72.8333
+    MAP_DEFAULT_ZOOM: int = 6
 
     # ── Notification Services ────────────────────────────────────────────────
     # Email (SMTP)
