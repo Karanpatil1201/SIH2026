@@ -142,11 +142,11 @@ class GeminiService:
 
             candidate_models = [
                 settings.GEMINI_MODEL,
+                "gemini-flash-latest",
                 "gemini-3.5-flash-lite",
-                "gemini-3.5-flash",
-                "gemini-2.5-flash",
-                "gemini-1.5-flash",
-                "gemini-3.7-flash"
+                "gemini-3.6-flash",
+                "gemini-flash-lite-latest",
+                "gemini-pro-latest"
             ]
             # Deduplicate preserving order
             seen_models = set()
