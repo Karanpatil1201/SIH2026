@@ -7,12 +7,15 @@ class Settings(BaseSettings):
     TAGLINE: str = "Transforming Marine Data into Intelligent Decisions."
     VERSION: str = "1.0.0"
     ENVIRONMENT: str = "development"
+    PORT: int = 8000
     
     SECRET_KEY: str = "change_me_in_production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
 
     DATABASE_URL: str = "sqlite:///./varuna.db"
+    SUPABASE_URL: str = ""
+    SUPABASE_ANON_KEY: str = ""
 
     OPENMETEO_BASE_URL: str = "https://marine-api.open-meteo.com/v1"
     OPENMETEO_WEATHER_URL: str = "https://api.open-meteo.com/v1"
