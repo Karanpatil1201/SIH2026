@@ -100,7 +100,13 @@ class DataFusionEngine:
             sea_level=fused_dict["sea_level"],
             quality_report=quality_report,
             trust_score=trust_score,
-            data_source_mode=mode
-            ,salinity_source=ocean.get("salinity_source", "fallback")
-            ,chlorophyll_source=ocean.get("chlorophyll_source", "fallback")
+            data_source_mode=mode,
+            salinity_source=ocean.get("salinity_source", "fallback"),
+            chlorophyll_source=ocean.get("chlorophyll_source", "fallback"),
+            source=ocean.get("source") or weather.get("source") or "open-meteo",
+            status=ocean.get("status") or weather.get("status") or "LIVE",
+            live_data_available=bool(ocean.get("live_data_available", True) and weather.get("live_data_available", True)),
+            fetched_at=ocean.get("fetched_at") or weather.get("fetched_at"),
+            is_forecast=bool(ocean.get("is_forecast") or weather.get("is_forecast")),
+            forecast_target=ocean.get("forecast_target") or weather.get("forecast_target")
         )

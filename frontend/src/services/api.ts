@@ -3,7 +3,10 @@ import {
   FishingZone, WhatIfRequest, WhatIfResponse, AgentTraceResponse,
   RAGQueryResponse, EvaluationDashboardResponse, SystemHealthResponse,
   ActiveAlert, CombinedMarineData, AuthResponse, UserResponse, PersonaType,
-  LocationAnalyseResponse, AreaScanResponse, RouteAnalyseResponse, AgentStatusItem
+  LocationAnalyseResponse, AreaScanResponse, RouteAnalyseResponse, AgentStatusItem,
+  MarineWhyEngine, DecisionDNA, AgentDissentResponse, MarineTimelineResponse,
+  MarineMissionProfileRequest, MarineMissionProfileResponse,
+  WhatIfEnhancedRequest, WhatIfEnhancedResponse
 } from '../types';
 
 const API_BASE_URL = (typeof window !== 'undefined' && (window as any).__VARUNA_API_URL__) ||
@@ -706,6 +709,34 @@ export const varunaAPI = {
     });
   },
 
+  async logout(): Promise<void> {
+    try {
+      await fetchJSON('/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore errors on logout
+    }
+  },
+
+  async getAdminOverview(): Promise<any> {
+    return await fetchJSON('/admin/dashboard');
+  },
+
+  async getAdminUsers(): Promise<any[]> {
+    return await fetchJSON('/admin/users');
+  },
+
+  async getAdminUserDetails(userId: number): Promise<any> {
+    return await fetchJSON(`/admin/users/${userId}`);
+  },
+
+  async getAdminUserQueries(userId: number): Promise<any[]> {
+    return await fetchJSON(`/admin/users/${userId}/queries`);
+  },
+
+  async getAdminActivity(): Promise<any[]> {
+    return await fetchJSON('/admin/activity');
+  },
+
   async register(userData: { username: string; email: string; password: string; role: PersonaType; full_name?: string }): Promise<UserResponse> {
     // Surface real backend errors — no silent fallback so registration failures are visible
     return await fetchJSON<UserResponse>('/auth/register', {
@@ -758,6 +789,49 @@ export const varunaAPI = {
         recommendation: 'Departure at 06:00 is NOT recommended (2.4m waves). Recommended Window: 08:30 AM (1.5m waves, Risk 36/100).'
       };
     }
+  },
+
+  // ─── Collaborative Agentic AI Intelligence (SIH26176) ──────────────────────
+  async getMarineWhy(lat: number, lon: number, mode: string = 'HYBRID'): Promise<MarineWhyEngine> {
+    return await fetchJSON<MarineWhyEngine>('/marine/why', {
+      method: 'POST',
+      body: JSON.stringify({ lat, lon, mode }),
+    });
+  },
+
+  async getMarineDecisionDNA(lat: number, lon: number, mode: string = 'HYBRID'): Promise<DecisionDNA> {
+    return await fetchJSON<DecisionDNA>('/marine/decision-dna', {
+      method: 'POST',
+      body: JSON.stringify({ lat, lon, mode }),
+    });
+  },
+
+  async getAgentDissent(lat: number, lon: number, mode: string = 'HYBRID'): Promise<AgentDissentResponse> {
+    return await fetchJSON<AgentDissentResponse>('/marine/agent-dissent', {
+      method: 'POST',
+      body: JSON.stringify({ lat, lon, mode }),
+    });
+  },
+
+  async getMarineTimeline(lat: number, lon: number, mode: string = 'HYBRID'): Promise<MarineTimelineResponse> {
+    return await fetchJSON<MarineTimelineResponse>('/marine/timeline', {
+      method: 'POST',
+      body: JSON.stringify({ lat, lon, mode }),
+    });
+  },
+
+  async analyzeMissionProfile(req: MarineMissionProfileRequest): Promise<MarineMissionProfileResponse> {
+    return await fetchJSON<MarineMissionProfileResponse>('/mission/analyze', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
+  },
+
+  async runWhatIfEnhanced(req: WhatIfEnhancedRequest): Promise<WhatIfEnhancedResponse> {
+    return await fetchJSON<WhatIfEnhancedResponse>('/scenario/simulate-enhanced', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    });
   }
 };
 

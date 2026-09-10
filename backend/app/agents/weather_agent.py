@@ -11,15 +11,25 @@ class WeatherAgent:
         self.name = "Weather Agent"
         self.live_provider = OpenMeteoWeatherProvider()
 
-    def process(self, lat: float, lon: float, mode: str = "HYBRID") -> Dict[str, Any]:
+    def process(
+        self,
+        lat: float,
+        lon: float,
+        mode: str = "HYBRID",
+        target_time: Optional[str] = None,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
         data = None
         if mode in ["LIVE", "HYBRID"]:
-            data = self.live_provider.get_weather_data(lat, lon)
+            data = self.live_provider.get_weather_data(lat, lon, target_time=target_time, force_refresh=force_refresh)
         
         if not data:
             demo_rec = DemoOceanProvider.get_demo_record(lat, lon)
             data = {
-                "source": "Open-Meteo Weather (Demo Fallback)",
+                "source": "demo_fallback",
+                "status": "DEMO_FALLBACK",
+                "live_data_available": False,
+                "fetched_at": demo_rec.get("fetched_at"),
                 "wind_speed": demo_rec.get("wind_speed", 18.5),
                 "wind_direction": demo_rec.get("wind_direction", 240.0),
                 "pressure": demo_rec.get("pressure", 1012.0),
@@ -27,7 +37,7 @@ class WeatherAgent:
                 "air_temperature": 29.2,
                 "humidity": 80.0,
                 "cloud_cover": 40.0,
-                "mode": "DEMO"
+                "mode": "DEMO_FALLBACK"
             }
 
         wind_s = float(data.get("wind_speed", 15.0) or 15.0)
@@ -58,7 +68,12 @@ class WeatherAgent:
             "air_temperature": data.get("air_temperature", 28.5),
             "humidity": data.get("humidity", 78.0),
             "cloud_cover": data.get("cloud_cover", 30.0),
-            "source": data.get("source", "Open-Meteo Weather"),
+            "source": data.get("source", "open-meteo"),
+            "status": data.get("status", "LIVE"),
+            "live_data_available": data.get("live_data_available", True),
+            "fetched_at": data.get("fetched_at"),
+            "is_forecast": data.get("is_forecast", False),
+            "forecast_target": data.get("forecast_target"),
             "mode": data.get("mode", "LIVE")
         }
 

@@ -29,9 +29,14 @@ class DemoOceanProvider:
                 closest_loc = name
                 base_vals = loc
 
+        now_iso = datetime.now(timezone.utc).isoformat()
         return {
-            "source": "VARUNA High-Resolution Synthetic Ocean Model",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "source": "demo_fallback",
+            "provider": "VARUNA High-Resolution Synthetic Ocean Model (Offline Fallback)",
+            "status": "DEMO_FALLBACK",
+            "live_data_available": False,
+            "fetched_at": now_iso,
+            "timestamp": now_iso,
             "latitude": lat,
             "longitude": lon,
             "location_name": closest_loc,
@@ -49,5 +54,5 @@ class DemoOceanProvider:
             "salinity": 35.4,
             "chlorophyll": 0.65 if lat > 17 else 0.38,
             "sea_level": 0.18,
-            "mode": "DEMO"
+            "mode": "DEMO_FALLBACK"
         }

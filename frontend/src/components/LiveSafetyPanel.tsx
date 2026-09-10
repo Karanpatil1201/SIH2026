@@ -160,6 +160,37 @@ export const LiveSafetyPanel: React.FC<LiveSafetyPanelProps> = ({
     setGpsStatus('idle');
   }, []);
 
+  const acquireLiveLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setGpsError('Geolocation is not supported by your browser.');
+      setGpsStatus('error');
+      return;
+    }
+    setGpsStatus('requesting');
+    setGpsError('');
+    setGpsMode('live');
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const pt = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setLivePos(pt);
+        setAccuracy(pos.coords.accuracy);
+        setLastUpdated(new Date());
+        setGpsStatus('tracking');
+        setAnalysisPos(pt);
+        setManualLat(String(pos.coords.latitude.toFixed(4)));
+        setManualLon(String(pos.coords.longitude.toFixed(4)));
+        // Also initiate continuous tracking
+        startTracking();
+      },
+      (err) => {
+        setGpsStatus('error');
+        setGpsError(err.message || 'Unable to retrieve location. Check browser permissions.');
+      },
+      { enableHighAccuracy: true, timeout: 15000 }
+    );
+  }, [startTracking]);
+
   // ── Analyse position ──
   const analysePosition = useCallback(async (pos: GeoPoint) => {
     setLoadingCurrent(true);
@@ -300,6 +331,14 @@ export const LiveSafetyPanel: React.FC<LiveSafetyPanelProps> = ({
                 <span>Vessel GPS</span>
               </button>
             </div>
+            <button
+              onClick={acquireLiveLocation}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 transition-all shadow-sm"
+              title="Click to automatically acquire and evaluate real-time location from your browser/device GPS"
+            >
+              <LocateFixed className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Use My Live Location</span>
+            </button>
             {/* Report button */}
             {onOpenReport && (
               <button
@@ -312,6 +351,35 @@ export const LiveSafetyPanel: React.FC<LiveSafetyPanelProps> = ({
               </button>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ── Active Evaluation Location Banner ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-white border border-blue-200 shadow-sm text-xs">
+        <div className="flex items-center space-x-2 flex-wrap">
+          <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
+          <span className="font-bold text-slate-500 uppercase tracking-wide text-[10px]">Evaluated Target:</span>
+          <span className="font-mono font-extrabold text-blue-950">
+            {analysisPos.lat.toFixed(4)}°N, {analysisPos.lon.toFixed(4)}°E
+          </span>
+          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+            gpsMode === 'live' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+            gpsMode === 'manual' ? 'bg-purple-100 text-purple-800 border border-purple-300' :
+            'bg-blue-100 text-blue-800 border border-blue-300'
+          }`}>
+            {gpsMode === 'live' ? '🛰️ Real-Time Device GPS' : gpsMode === 'manual' ? '✍️ Custom Coordinates' : '⚓ Marine Sector Preset'}
+          </span>
+        </div>
+        <div className="flex items-center space-x-3 text-slate-500 text-[11px]">
+          {accuracy && gpsMode === 'live' && <span>GPS Accuracy: ±{Math.round(accuracy)}m</span>}
+          {lastUpdated && <span>Last sync: {lastUpdated.toLocaleTimeString()}</span>}
+          <button
+            onClick={() => analysePosition(analysisPos)}
+            className="text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Re-scan</span>
+          </button>
         </div>
       </div>
 
@@ -471,14 +539,25 @@ export const LiveSafetyPanel: React.FC<LiveSafetyPanelProps> = ({
 
             {gpsMode === 'manual' && (
               <>
-                <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-blue-500">Custom Maritime Coordinates</div>
-                <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-blue-500">Custom Maritime Coordinates</div>
+                  <button
+                    onClick={acquireLiveLocation}
+                    className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1"
+                    title="Autofill with current device location"
+                  >
+                    <LocateFixed className="w-3 h-3" />
+                    <span>Autofill Live GPS</span>
+                  </button>
+                </div>
+                <div className="space-y-2.5">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Latitude (-90 to 90)</label>
                     <input
                       type="number" step="0.0001" placeholder="e.g. 18.9667"
                       value={manualLat}
                       onChange={e => setManualLat(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleManualSubmit(); }}
                       className="mt-1 w-full px-3 py-2 rounded-xl text-sm font-mono font-bold text-blue-900 outline-none transition-all"
                       style={{ background: '#eff6ff', border: '1px solid rgba(37,99,235,0.25)' }}
                     />
@@ -489,6 +568,7 @@ export const LiveSafetyPanel: React.FC<LiveSafetyPanelProps> = ({
                       type="number" step="0.0001" placeholder="e.g. 72.8333"
                       value={manualLon}
                       onChange={e => setManualLon(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleManualSubmit(); }}
                       className="mt-1 w-full px-3 py-2 rounded-xl text-sm font-mono font-bold text-blue-900 outline-none transition-all"
                       style={{ background: '#eff6ff', border: '1px solid rgba(37,99,235,0.25)' }}
                     />
@@ -501,12 +581,15 @@ export const LiveSafetyPanel: React.FC<LiveSafetyPanelProps> = ({
                   )}
                   <button
                     onClick={handleManualSubmit}
-                    className="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center space-x-2 hover:opacity-90 transition-opacity"
+                    className="w-full py-2.5 rounded-xl text-sm font-bold text-white flex items-center justify-center space-x-2 hover:opacity-90 transition-opacity shadow-md"
                     style={{ background: 'linear-gradient(135deg, #2563eb, #1d4ed8)' }}
                   >
                     <Eye className="w-4 h-4" />
                     <span>Analyse Coordinates</span>
                   </button>
+                  <p className="text-[10px] text-slate-400 text-center">
+                    Simulates 360° offshore radar lookahead for specified coordinates
+                  </p>
                 </div>
               </>
             )}

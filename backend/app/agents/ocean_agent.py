@@ -13,16 +13,23 @@ class OceanAgent:
         self.live_provider = OpenMeteoMarineProvider()
         self.copernicus_provider = CopernicusMarineService()
 
-    def process(self, lat: float, lon: float, mode: str = "HYBRID") -> Dict[str, Any]:
+    def process(
+        self,
+        lat: float,
+        lon: float,
+        mode: str = "HYBRID",
+        target_time: Optional[str] = None,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
         data = None
         if mode in ["LIVE", "HYBRID"]:
-            data = self.live_provider.get_ocean_data(lat, lon)
+            data = self.live_provider.get_ocean_data(lat, lon, target_time=target_time, force_refresh=force_refresh)
 
             # Open-Meteo does not expose salinity or chlorophyll. Enrich its live
             # record with authenticated Copernicus observations when available.
             copernicus_live = self.copernicus_provider.get_live_ocean_data(lat, lon)
             if copernicus_live:
-                openmeteo_source = (data or {}).get("source", "Open-Meteo Marine")
+                openmeteo_source = (data or {}).get("source", "open-meteo")
                 data = {**(data or {}), **{key: value for key, value in copernicus_live.items() if value is not None}}
                 data["source"] = f"{openmeteo_source} + Copernicus Marine Live"
         
@@ -62,7 +69,12 @@ class OceanAgent:
             "salinity": data.get("salinity", 35.2),
             "chlorophyll": data.get("chlorophyll", 0.45),
             "sea_level": data.get("sea_level", 0.1),
-            "source": data.get("source", "Open-Meteo Marine"),
+            "source": data.get("source", "open-meteo"),
+            "status": data.get("status", "LIVE"),
+            "live_data_available": data.get("live_data_available", True),
+            "fetched_at": data.get("fetched_at"),
+            "is_forecast": data.get("is_forecast", False),
+            "forecast_target": data.get("forecast_target"),
             "salinity_source": "Copernicus Marine Live" if data.get("salinity") is not None and "Copernicus" in data.get("source", "") else "fallback",
             "chlorophyll_source": "Copernicus Marine Live" if data.get("chlorophyll") is not None and "Copernicus" in data.get("source", "") else "fallback",
             "mode": data.get("mode", "LIVE")

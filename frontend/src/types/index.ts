@@ -169,6 +169,132 @@ export interface AgentExecutionStep {
   timestamp: string;
 }
 
+export interface MarineWhyEngine {
+  recommendation: string;
+  summary_why: string;
+  primary_factors: string[];
+  supporting_agents: string[];
+  dissenting_agents: string[];
+  key_evidence: Array<{ factor: string; value: number; unit: string; impact: string }>;
+  uncertainty_analysis: string;
+  confidence: number;
+}
+
+export interface DecisionDNA {
+  decision_id: string;
+  timestamp: string;
+  recommendation: string;
+  risk_score: number;
+  confidence: number;
+  location: { latitude: number; longitude: number; name: string };
+  mission_context: Record<string, any>;
+  agents: Record<string, string>;
+  major_factors: string[];
+  supporting_evidence: string[];
+  conflicting_evidence: string[];
+  uncertainty: string[];
+  what_would_change_decision: string[];
+  data_sources: string[];
+}
+
+export interface AgentOpinion {
+  agent: string;
+  decision: string;
+  risk_score: number;
+  confidence: number;
+  key_evidence: string;
+  priority_level: string;
+}
+
+export interface AgentDissentResponse {
+  has_conflict: boolean;
+  conflict_detected: string;
+  resolution_strategy: string;
+  resolution_rationale: string;
+  agent_opinions: AgentOpinion[];
+  final_consensus: string;
+}
+
+export interface TimelineStage {
+  stage: 'PAST' | 'PRESENT' | 'FUTURE';
+  timestamp_label: string;
+  wave_height_m: number;
+  wind_speed_kmh: number;
+  surface_temp_c: number;
+  risk_score: number;
+  risk_level: string;
+  is_simulated?: boolean;
+  notes: string;
+}
+
+export interface MarineTimelineResponse {
+  location: { latitude: number; longitude: number; name: string };
+  timeline_stages: TimelineStage[];
+  temporal_reasoning: string;
+}
+
+export interface MarineMissionProfileRequest {
+  latitude: number;
+  longitude: number;
+  departure_time: string;
+  vessel_type: string;
+  mission_duration_hours: number;
+  target_activity: string;
+  mode?: string;
+}
+
+export interface MarineMissionProfileResponse {
+  mission_id: string;
+  recommendation: string;
+  risk_score: number;
+  confidence: number;
+  mission_inputs: Record<string, any>;
+  major_factors: string[];
+  agent_decisions: Record<string, string>;
+  expected_changes_during_mission: string[];
+  decision_dna: DecisionDNA;
+  why_engine: MarineWhyEngine;
+  what_would_change: string[];
+}
+
+export interface WhatIfEnhancedRequest {
+  lat: number;
+  lon: number;
+  baseline_departure?: string;
+  scenario_departure?: string;
+  vessel_type?: string;
+  mission_duration_hours?: number;
+  wind_increase_pct?: number;
+  wave_increase_pct?: number;
+  pressure_drop_hpa?: number;
+  delta_lat_km?: number;
+  delta_lon_km?: number;
+}
+
+export interface WhatIfEnhancedResponse {
+  baseline: {
+    departure: string;
+    risk_score: number;
+    risk_level: string;
+    recommendation: string;
+    wave_height_m: number;
+    wind_speed_kmh: number;
+  };
+  scenario: {
+    departure: string;
+    risk_score: number;
+    risk_level: string;
+    recommendation: string;
+    wave_height_m: number;
+    wind_speed_kmh: number;
+  };
+  risk_delta: number;
+  recommendation_change: string;
+  main_reason: string;
+  detailed_explanation: string;
+  top_contributing_changes: string[];
+}
+
 export interface AgentTraceResponse {
   query: string;
   master_agent_plan: string[];
@@ -187,6 +313,12 @@ export interface AgentTraceResponse {
   geofence_summary?: any;
   pfz_candidates?: any[];
   safety_verification?: any;
+  why_engine?: MarineWhyEngine;
+  decision_dna?: DecisionDNA;
+  agent_dissent?: AgentDissentResponse;
+  timeline?: MarineTimelineResponse;
+  mission_profile?: MarineMissionProfileResponse;
+  what_would_change?: string[];
 }
 
 

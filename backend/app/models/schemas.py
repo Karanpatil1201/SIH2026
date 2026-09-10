@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Union
 from datetime import datetime
 
 # User & Auth
@@ -14,7 +14,7 @@ class UserCreate(UserBase):
 
 class UserResponse(UserBase):
     model_config = ConfigDict(from_attributes=True)
-    id: int
+    id: Union[str, int]
     is_active: bool
     created_at: datetime
 
@@ -76,6 +76,12 @@ class CombinedMarineData(BaseModel):
     data_source_mode: str = "LIVE" # LIVE vs DEMO vs FALLBACK
     salinity_source: str = "fallback"
     chlorophyll_source: str = "fallback"
+    source: str = "open-meteo"
+    status: str = "LIVE"
+    live_data_available: bool = True
+    fetched_at: Optional[str] = None
+    is_forecast: bool = False
+    forecast_target: Optional[str] = None
 
 # Risk & SHAP Explainer
 class FeatureContribution(BaseModel):
@@ -196,6 +202,109 @@ class WhatIfResponse(BaseModel):
     top_contributing_changes: List[str]
     explanation: str
 
+# Collaborative Agentic AI Schemas (SIH26176)
+class MarineWhyEngine(BaseModel):
+    recommendation: str  # RECOMMENDED, CAUTION, AVOID
+    summary_why: str
+    primary_factors: List[str]
+    supporting_agents: List[str]
+    dissenting_agents: List[str]
+    key_evidence: List[Dict[str, Any]]
+    uncertainty_analysis: str
+    confidence: float  # 0.0 - 1.0
+
+class DecisionDNA(BaseModel):
+    decision_id: str
+    timestamp: str
+    recommendation: str  # RECOMMENDED, CAUTION, AVOID
+    risk_score: float  # 0 - 100
+    confidence: float  # 0.0 - 1.0
+    location: Dict[str, Any]
+    mission_context: Dict[str, Any]
+    agents: Dict[str, str]  # e.g. {"ocean": "CAUTION", "weather": "CAUTION", "fisheries": "RECOMMENDED"}
+    major_factors: List[str]
+    supporting_evidence: List[str]
+    conflicting_evidence: List[str]
+    uncertainty: List[str]
+    what_would_change_decision: List[str]
+    data_sources: List[str]
+
+class AgentOpinion(BaseModel):
+    agent: str
+    decision: str  # RECOMMENDED, CAUTION, AVOID, SAFE, DANGER
+    risk_score: float
+    confidence: float
+    key_evidence: str
+    priority_level: str  # SAFETY_CRITICAL, OPERATIONAL, ECOLOGICAL
+
+class AgentDissentResponse(BaseModel):
+    has_conflict: bool
+    conflict_detected: str
+    resolution_strategy: str
+    resolution_rationale: str
+    agent_opinions: List[AgentOpinion]
+    final_consensus: str
+
+class TimelineStage(BaseModel):
+    stage: str  # PAST, PRESENT, FUTURE
+    timestamp_label: str
+    wave_height_m: float
+    wind_speed_kmh: float
+    surface_temp_c: float
+    risk_score: float
+    risk_level: str
+    is_simulated: bool = False
+    notes: str
+
+class MarineTimelineResponse(BaseModel):
+    location: Dict[str, Any]
+    timeline_stages: List[TimelineStage]
+    temporal_reasoning: str
+
+class MarineMissionProfileRequest(BaseModel):
+    latitude: float = Field(..., ge=-90.0, le=90.0)
+    longitude: float = Field(..., ge=-180.0, le=180.0)
+    departure_time: str = "05:00 AM"
+    vessel_type: str = "Fishing Boat"
+    mission_duration_hours: float = 6.0
+    target_activity: str = "Pelagic Fishing"
+    mode: str = "HYBRID"
+
+class MarineMissionProfileResponse(BaseModel):
+    mission_id: str
+    recommendation: str  # RECOMMENDED, CAUTION, AVOID
+    risk_score: float
+    confidence: float
+    mission_inputs: Dict[str, Any]
+    major_factors: List[str]
+    agent_decisions: Dict[str, str]
+    expected_changes_during_mission: List[str]
+    decision_dna: DecisionDNA
+    why_engine: MarineWhyEngine
+    what_would_change: List[str]
+
+class WhatIfEnhancedRequest(BaseModel):
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lon: float = Field(..., ge=-180.0, le=180.0)
+    baseline_departure: str = "08:00 AM"
+    scenario_departure: str = "05:00 AM"
+    vessel_type: str = "Fishing Boat"
+    mission_duration_hours: float = 6.0
+    wind_increase_pct: float = 0.0
+    wave_increase_pct: float = 0.0
+    pressure_drop_hpa: float = 0.0
+    delta_lat_km: float = 0.0
+    delta_lon_km: float = 0.0
+
+class WhatIfEnhancedResponse(BaseModel):
+    baseline: Dict[str, Any]
+    scenario: Dict[str, Any]
+    risk_delta: float
+    recommendation_change: str
+    main_reason: str
+    detailed_explanation: str
+    top_contributing_changes: List[str]
+
 # Agent Observability & Trace
 class AgentExecutionStep(BaseModel):
     agent_name: str
@@ -222,6 +331,15 @@ class AgentTraceResponse(BaseModel):
     geofence_summary: Optional[Dict[str, Any]] = None
     pfz_candidates: Optional[List[Dict[str, Any]]] = None
     safety_verification: Optional[Dict[str, Any]] = None
+    why_engine: Optional[MarineWhyEngine] = None
+    decision_dna: Optional[DecisionDNA] = None
+    agent_dissent: Optional[AgentDissentResponse] = None
+    timeline: Optional[MarineTimelineResponse] = None
+    mission_profile: Optional[MarineMissionProfileResponse] = None
+    what_would_change: Optional[List[str]] = None
+    data_provenance: Optional[Dict[str, Any]] = None
+    prediction_summary: Optional[Dict[str, Any]] = None
+
 
 
 # RAG & Knowledge

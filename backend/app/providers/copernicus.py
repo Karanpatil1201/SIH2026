@@ -5,7 +5,12 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-import copernicusmarine
+try:
+    import copernicusmarine
+except ImportError:
+    # The provider has a deterministic fallback for local/demo operation; keep
+    # the rest of the backend importable when the optional toolbox is absent.
+    copernicusmarine = None
 import numpy as np
 from app.core.config import settings
 from app.providers.base import OceanDataProvider
@@ -38,7 +43,7 @@ class CopernicusMarineService(OceanDataProvider):
 
     def get_live_ocean_data(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
         """Fetch live Copernicus salinity, temperature, and chlorophyll at a marine point."""
-        if not self.username or not self.password:
+        if not self.username or not self.password or copernicusmarine is None:
             return None
         cache_key = (round(lat, 2), round(lon, 2))
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Anchor, LayoutDashboard, Bot, BarChart3, Fish, Map,
-  Bell, Server, LogIn, LogOut, ChevronDown, Radio, Globe, LocateFixed, FileText
+  Bell, Server, LogIn, LogOut, ChevronDown, Radio, Globe, LocateFixed, FileText, Brain
 } from 'lucide-react';
 import { PersonaType, UserResponse } from '../types';
 import { GLOBAL_MARINE_LOCATIONS } from '../data/globalMarineLocations';
@@ -24,14 +24,15 @@ interface NavbarProps {
 }
 
 const TABS = [
-  { id: 'dashboard', label: 'Overview',       icon: LayoutDashboard },
-  { id: 'safety',    label: 'Live Safety',    icon: LocateFixed, badge: 'GPS' },
-  { id: 'agents',    label: 'AI Assistant',   icon: Bot,   badge: 'AI' },
-  { id: 'charts',    label: 'Ocean State',    icon: BarChart3 },
-  { id: 'fishing',   label: 'Fishing Zones',  icon: Fish },
-  { id: 'map',       label: 'Map Explorer',   icon: Map },
-  { id: 'cyclone',   label: 'Alerts',         icon: Bell },
-  { id: 'sources',   label: 'Data Sources',   icon: Server },
+  { id: 'dashboard',     label: 'Overview',       icon: LayoutDashboard },
+  { id: 'collaborative', label: 'Decision Twin',  icon: Brain, badge: 'NEW' },
+  { id: 'safety',        label: 'Live Safety',    icon: LocateFixed, badge: 'GPS' },
+  { id: 'agents',        label: 'AI Assistant',   icon: Bot,   badge: 'AI' },
+  { id: 'charts',        label: 'Ocean State',    icon: BarChart3 },
+  { id: 'fishing',       label: 'Fishing Zones',  icon: Fish },
+  { id: 'map',           label: 'Map Explorer',   icon: Map },
+  { id: 'cyclone',       label: 'Alerts',         icon: Bell },
+  { id: 'sources',       label: 'Data Sources',   icon: Server },
 ];
 
 const TAB_TRANSLATION_KEYS: Record<string, Parameters<ReturnType<typeof useLanguage>['t']>[0]> = {

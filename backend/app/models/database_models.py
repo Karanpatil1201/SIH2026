@@ -1,10 +1,35 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, JSON, ForeignKey
+import uuid
+from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, JSON, ForeignKey, TypeDecorator
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.sql import func
 from app.core.database import Base
 
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+    Uses PostgreSQL's UUID type, otherwise uses String.
+    """
+    impl = String
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=False))
+        else:
+            return dialect.type_descriptor(String())
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        return str(value)
+
 class UserDB(Base):
     __tablename__ = "users"
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(GUID, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
@@ -17,6 +42,7 @@ class UserDB(Base):
     notification_push = Column(Boolean, default=True)
     notification_severity_threshold = Column(String, default="INFO") # INFO, WARNING, CRITICAL
     is_active = Column(Boolean, default=True)
+    last_login = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class MarineObservationDB(Base):
@@ -103,7 +129,7 @@ class AlertDB(Base):
 class FeedbackDB(Base):
     __tablename__ = "feedback"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=True)
     persona = Column(String, nullable=False)
     query_or_prediction_id = Column(String, nullable=True)
     feedback_type = Column(String, nullable=False) # CORRECT, INCORRECT, FALSE_ALERT, MISSED_EVENT
@@ -134,7 +160,7 @@ class RAGDocumentDB(Base):
 class NotificationDB(Base):
     __tablename__ = "notifications"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=True)
     channel = Column(String, nullable=False)  # EMAIL, SMS, PUSH
     recipient = Column(String, nullable=False)  # email address, phone number, or FCM token
     subject = Column(String, nullable=True)
@@ -157,4 +183,31 @@ class OTPChallengeDB(Base):
     code_hash = Column(String, nullable=False)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     consumed_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class UserSessionDB(Base):
+    __tablename__ = "user_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=False)
+    login_time = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    logout_time = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class QueryHistoryDB(Base):
+    __tablename__ = "query_history"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=False)
+    query = Column(Text, nullable=False)
+    language = Column(String, default="en")
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    response_status = Column(String, default="SUCCESS") # SUCCESS, ERROR
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class ActivityLogDB(Base):
+    __tablename__ = "activity_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(GUID, ForeignKey("users.id"), nullable=True)
+    action = Column(String, nullable=False) # LOGIN, LOGOUT, QUERY_RAG, QUERY_CHAT, UPDATE_PROFILE, etc.
+    metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

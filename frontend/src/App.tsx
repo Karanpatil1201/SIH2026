@@ -8,10 +8,12 @@ import { RiskAssessmentView } from './components/RiskAssessmentView';
 import { CycloneAnomalyView } from './components/CycloneAnomalyView';
 import { FishingAdvisoryView } from './components/FishingAdvisoryView';
 import { AgentChatRAG } from './components/AgentChatRAG';
+import { AdminDashboard } from './components/AdminDashboard';
 import { SystemHealthView } from './components/SystemHealthView';
 import { LoginModal } from './components/LoginModal';
 import { JSONAPIModal } from './components/JSONAPIModal';
 import { MarineReportModal } from './components/MarineReportModal';
+import { CollaborativeIntelligenceView } from './components/CollaborativeIntelligenceView';
 
 import { varunaAPI } from './services/api';
 import {
@@ -180,18 +182,33 @@ export function App() {
     localStorage.setItem('varuna_token', token);
   };
 
-  const handleLogout = () => {
-    const oldUsername = currentUser?.username;
+  const handleLogout = async () => {
+    try {
+      await varunaAPI.logout();
+    } catch (e) {
+      console.error('Logout error', e);
+    }
     setCurrentUser(null);
-    setIsLoginOpen(true); // Re-engage login gate
+    setIsLoginOpen(true);
     localStorage.removeItem('varuna_user');
     localStorage.removeItem('varuna_token');
-    // Also clear the legacy shared chat key in case it exists
     localStorage.removeItem('varuna_agent_chat_history_v2');
   };
 
   const activeAlert = alerts.find(a => a.id !== dismissedAlertId);
   const criticalAlerts = alerts.filter(a => a.severity === 'CRITICAL' || a.severity === 'WARNING');
+
+  // Handle Admin Route
+  if (window.location.pathname.startsWith('/admin')) {
+    return (
+      <div className="relative">
+        {isLoginOpen && <LoginModal isOpen={isLoginOpen} onLoginSuccess={handleLoginSuccess} onClose={() => {}} />}
+        {currentUser && (
+          <AdminDashboard currentUser={currentUser} onLogout={handleLogout} />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f0f6ff] text-[#0f172a] flex flex-col selection:bg-blue-600 selection:text-white font-sans">
@@ -251,6 +268,14 @@ export function App() {
             activePersona={activePersona}
             onSelectLocation={handleSelectLocation}
             onOpenFullMap={() => setActiveTab('map')}
+          />
+        )}
+
+        {/* Marine Collaborative Agentic AI Intelligence (SIH26176) */}
+        {activeTab === 'collaborative' && (
+          <CollaborativeIntelligenceView
+            initialLat={lat}
+            initialLon={lon}
           />
         )}
 

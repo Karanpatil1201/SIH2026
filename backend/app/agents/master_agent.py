@@ -13,6 +13,14 @@ import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
+import sys
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 logger = logging.getLogger("varuna.master_agent")
 
 from app.agents.intent_context_agent import IntentContextAgent, StructuredContext
@@ -38,9 +46,11 @@ from app.agents.safety_verification_agent import SafetyVerificationAgent
 from app.fusion.fusion_engine import DataFusionEngine
 from app.risk.risk_engine import RiskEngine
 from app.gis.pathfinding import RoutePathfinder
+from app.agents.collaborative_engine import CollaborativeAIEngine
 from app.models.schemas import (
     AgentTraceResponse, AgentExecutionStep, RiskAssessmentResponse,
-    CombinedMarineData, RouteComparisonResponse
+    CombinedMarineData, RouteComparisonResponse, MarineWhyEngine, DecisionDNA,
+    AgentDissentResponse, MarineTimelineResponse
 )
 
 class MasterAgent:
@@ -179,7 +189,14 @@ class MasterAgent:
             )
         }
 
-    def _analyse_location_uncached(self, lat: float, lon: float, mode: str = "HYBRID") -> Dict[str, Any]:
+    def _analyse_location_uncached(
+        self,
+        lat: float,
+        lon: float,
+        mode: str = "HYBRID",
+        target_time: Optional[str] = None,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
         """
         Primary location analysis logic. Gathers all agent evidence,
         fuses raw data, runs RiskEngine, and returns structured findings.
@@ -188,9 +205,9 @@ class MasterAgent:
         gis_res = self.gis_agent.process(lat, lon)
         marine_region = gis_res["findings"].get("marine_region", f"Marine Point ({round(lat,2)}, {round(lon,2)})")
 
-        # Run specialized domain agents
-        ocean_res = self.ocean_agent.process(lat, lon, mode=mode)
-        weather_res = self.weather_agent.process(lat, lon, mode=mode)
+        # Run specialized domain agents with target_time and force_refresh
+        ocean_res = self.ocean_agent.process(lat, lon, mode=mode, target_time=target_time, force_refresh=force_refresh)
+        weather_res = self.weather_agent.process(lat, lon, mode=mode, target_time=target_time, force_refresh=force_refresh)
         ocean_findings = ocean_res["findings"]
         weather_findings = weather_res["findings"]
         sat_res = self.satellite_agent.process(lat, lon, ocean_findings, mode=mode)
@@ -220,13 +237,17 @@ class MasterAgent:
         anom_res = self.anomaly_agent.process(fused_dict)
         pred_res = self.prediction_agent.process(fused_dict)
 
+        # Log Prediction output (Priority 5)
+        pred_findings = pred_res.get("findings", {})
+        print(f"[PREDICTION]\nstatus=SUCCESS\npredicted_wave_height_24h={pred_findings.get('predicted_wave_height_24h', '?')}m\npredicted_wind_speed_24h={pred_findings.get('predicted_wind_speed_24h', '?')} km/h\npressure_tendency={pred_findings.get('pressure_tendency', 'STABLE')}", flush=True)
+
         # Collaborative Evidence Exchange
         collab_res = self._execute_collaborative_reasoning(
             ocean_res, weather_res, sat_res, fisheries_res, coral_res, vessel_res,
             geofence_res=geofence_res, lightning_res=lightning_res, cyclone_res=cyclone_res
         )
 
-        all_agent_findings = [ocean_res, weather_res, sat_res, fisheries_res, coral_res, vessel_res, anom_res, geofence_res, lightning_res, cyclone_res]
+        all_agent_findings = [ocean_res, weather_res, sat_res, fisheries_res, coral_res, vessel_res, anom_res, geofence_res, lightning_res, cyclone_res, pred_res]
 
         # Central Risk Engine
         risk_result = self.risk_engine.calculate_risk(fused_dict, all_agent_findings)
@@ -239,7 +260,7 @@ class MasterAgent:
             hazard_data=hazard_res
         )
 
-        return {
+        res_dict = {
             "latitude": lat,
             "longitude": lon,
             "location_name": marine_region,
@@ -283,6 +304,20 @@ class MasterAgent:
                     "summary": f"Wind: {fused_record.wind_speed} km/h | Pressure: {fused_record.pressure} hPa",
                     "reasons": weather_res["reasons"],
                     "recommendations": weather_res["recommendations"]
+                },
+                {
+                    "agent": "Prediction Agent",
+                    "status": pred_res["status"],
+                    "confidence": pred_findings.get("confidence", 0.89),
+                    "summary": f"24h Trend Horizon: Wave {pred_findings.get('predicted_wave_height_24h')}m | Wind {pred_findings.get('predicted_wind_speed_24h')} km/h | Pressure {pred_findings.get('pressure_tendency')}",
+                    "reasons": [
+                        f"Predicted wave height (24h): {pred_findings.get('predicted_wave_height_24h')} m",
+                        f"Predicted wind speed (24h): {pred_findings.get('predicted_wind_speed_24h')} km/h",
+                        f"Barometric pressure tendency: {pred_findings.get('pressure_tendency')}"
+                    ],
+                    "recommendations": [
+                        "Incorporate 24-hour predictive trends into departure window safety margins."
+                    ]
                 },
                 {
                     "agent": "Satellite Agent",
@@ -338,6 +373,15 @@ class MasterAgent:
             "hazard_summary": hazard_res,
             "safety_verification": safety_check,
             "pfz_candidates": fisheries_res["findings"].get("all_candidate_pfzs", []),
+            "prediction_summary": pred_findings,
+            "data_provenance": {
+                "source": fused_record.source,
+                "status": fused_record.status,
+                "live_data_available": fused_record.live_data_available,
+                "fetched_at": fused_record.fetched_at,
+                "is_forecast": fused_record.is_forecast,
+                "forecast_target": fused_record.forecast_target
+            },
             "explainability": {
                 "top_positive_forces": risk_result["positive_forces"],
                 "top_negative_forces": risk_result["negative_forces"]
@@ -346,14 +390,79 @@ class MasterAgent:
             "fused_record": fused_record
         }
 
-    def analyse_location(self, lat: float, lon: float, mode: str = "HYBRID") -> Dict[str, Any]:
-        """Return a fresh-enough location analysis with caching."""
-        cache_key = (round(lat, 3), round(lon, 3), mode)
-        cached = self._location_cache.get(cache_key)
-        if cached and time.monotonic() - cached[0] < 120:
-            return copy.deepcopy(cached[1])
+        # Build Collaborative Agentic AI Intelligence models
+        conds = res_dict["current_conditions"]
+        rec_label = CollaborativeAIEngine.get_recommendation_from_risk(
+            risk_result["risk_score"],
+            has_geofence_violation=not geofence_res["findings"].get("is_geofence_compliant", True),
+            has_storm=(cyclone_res.get("status") == "DANGER" or lightning_res.get("status") == "DANGER")
+        )
 
-        result = self._analyse_location_uncached(lat, lon, mode)
+        why_eng = CollaborativeAIEngine.generate_why_engine(
+            risk_score=risk_result["risk_score"],
+            risk_level=risk_result["risk_level"],
+            recommendation=rec_label,
+            location_name=marine_region,
+            current_conditions=conds,
+            agent_findings=res_dict["agent_findings"],
+            collab_reasoning=collab_res,
+            confidence=risk_result["confidence"]
+        )
+
+        dna_obj = CollaborativeAIEngine.generate_decision_dna(
+            recommendation=rec_label,
+            risk_score=risk_result["risk_score"],
+            confidence=risk_result["confidence"],
+            latitude=lat,
+            longitude=lon,
+            location_name=marine_region,
+            current_conditions=conds,
+            agent_findings=res_dict["agent_findings"]
+        )
+
+        dissent_obj = CollaborativeAIEngine.resolve_agent_dissent(
+            current_conditions=conds,
+            agent_findings=res_dict["agent_findings"],
+            overall_risk_score=risk_result["risk_score"],
+            geofence_data=geofence_res["findings"]
+        )
+
+        timeline_obj = CollaborativeAIEngine.generate_marine_timeline(
+            latitude=lat,
+            longitude=lon,
+            location_name=marine_region,
+            current_conditions=conds,
+            current_risk_score=risk_result["risk_score"]
+        )
+
+        res_dict["recommendation"] = rec_label
+        res_dict["why_engine"] = why_eng
+        res_dict["decision_dna"] = dna_obj
+        res_dict["agent_dissent"] = dissent_obj
+        res_dict["timeline"] = timeline_obj
+        res_dict["what_would_change"] = dna_obj.what_would_change_decision
+
+        return res_dict
+
+    def analyse_location(
+        self,
+        lat: float,
+        lon: float,
+        mode: str = "HYBRID",
+        target_time: Optional[str] = None,
+        force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """Return fresh location analysis with controlled caching."""
+        cache_key = (round(lat, 4), round(lon, 4), mode, target_time or "current")
+        if not force_refresh:
+            cached = self._location_cache.get(cache_key)
+            if cached and time.monotonic() - cached[0] < 120:
+                res = copy.deepcopy(cached[1])
+                if "data_provenance" in res:
+                    res["data_provenance"]["status"] = "CACHED"
+                return res
+
+        result = self._analyse_location_uncached(lat, lon, mode=mode, target_time=target_time, force_refresh=force_refresh)
         self._location_cache[cache_key] = (time.monotonic(), result)
         return copy.deepcopy(result)
 
@@ -534,8 +643,25 @@ class MasterAgent:
         ))
 
         # Step 3: Location Telemetry & Core Agent Processing
-        loc_analysis = self.analyse_location(ctx.latitude, ctx.longitude, mode=mode)
+        try:
+            print(f"\n[VARUNA]\nquery={query}", flush=True)
+            print(f"[LOCATION]\nlat={ctx.latitude}\nlon={ctx.longitude}\nsource={ctx.location_source}", flush=True)
+        except Exception:
+            safe_q = query.encode("ascii", "backslashreplace").decode("ascii")
+            print(f"\n[VARUNA]\nquery={safe_q}", flush=True)
+            print(f"[LOCATION]\nlat={ctx.latitude}\nlon={ctx.longitude}\nsource={ctx.location_source}", flush=True)
+
+        loc_analysis = self.analyse_location(
+            ctx.latitude,
+            ctx.longitude,
+            mode=mode,
+            target_time=ctx.target_time,
+            force_refresh=True
+        )
         fused = loc_analysis["fused_record"]
+
+        if ctx.is_forecast or loc_analysis.get("data_provenance", {}).get("is_forecast"):
+            print(f"[FORECAST]\nstatus=SUCCESS\ntarget={ctx.target_time}", flush=True)
 
         # Record Domain Agent Steps
         steps.append(AgentExecutionStep(
@@ -559,6 +685,14 @@ class MasterAgent:
             status="COMPLETED",
             action_taken="Retrieved meteorological wind vectors, gusts, and barometric pressure",
             details={"wind_speed": fused.wind_speed, "pressure": fused.pressure},
+            timestamp=now_str()
+        ))
+
+        steps.append(AgentExecutionStep(
+            agent_name="PredictionAgent",
+            status="COMPLETED",
+            action_taken="Calculated 24-hour predictive trends for wave swell and wind vectors",
+            details=loc_analysis.get("prediction_summary", {}),
             timestamp=now_str()
         ))
 
@@ -672,6 +806,8 @@ class MasterAgent:
         chat_context = dict(loc_analysis)
         chat_context["query_language"] = ctx.language
         chat_context["structured_context"] = ctx.to_dict()
+        chat_context["prediction_summary"] = loc_analysis.get("prediction_summary", {})
+        chat_context["data_provenance"] = loc_analysis.get("data_provenance", {})
         if route_analysis:
             chat_context["route_analysis"] = route_analysis
         if departure_opt:
@@ -694,10 +830,14 @@ class MasterAgent:
             final_answer = ai_response
             fallback_used = False
             fallback_reason = "NONE"
+            print(f"[GEMINI]\nstatus=SUCCESS", flush=True)
+            print(f"[FINAL]\nsource=LIVE_AGENT_DATA+GEMINI", flush=True)
         else:
             final_answer = ai_response if ai_response else localized_answer
             fallback_used = True
             fallback_reason = ai_detail.get("fallback_reason") or "Gemini unavailable or generation failed"
+            print(f"[GEMINI]\nstatus=FALLBACK\nreason={fallback_reason}", flush=True)
+            print(f"[FINAL]\nsource=LIVE_AGENT_DATA+DETERMINISTIC_SYNTHESIS", flush=True)
 
         audit_log = (
             f"\n================ CHATBOT REQUEST AUDIT ================\n"
@@ -787,5 +927,12 @@ class MasterAgent:
             departure_optimization=departure_opt,
             geofence_summary=loc_analysis["geofence_summary"],
             pfz_candidates=pfz_candidates,
-            safety_verification=safety_verif
+            safety_verification=safety_verif,
+            why_engine=loc_analysis.get("why_engine"),
+            decision_dna=loc_analysis.get("decision_dna"),
+            agent_dissent=loc_analysis.get("agent_dissent"),
+            timeline=loc_analysis.get("timeline"),
+            what_would_change=loc_analysis.get("what_would_change"),
+            data_provenance=loc_analysis.get("data_provenance"),
+            prediction_summary=loc_analysis.get("prediction_summary")
         )

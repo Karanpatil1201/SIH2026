@@ -3,7 +3,8 @@ import {
   Bot, Send, Search, CheckCircle2, BookOpen, ExternalLink, Sparkles,
   Layers, Volume2, VolumeX, Copy, Check, User, ArrowRight, ShieldAlert,
   Compass, Fish, Flame, RefreshCw, Radio, Trash2, History, AlertTriangle,
-  Clock, CheckCircle, XCircle, MapPin, Anchor, Cpu
+  Clock, CheckCircle, XCircle, MapPin, Anchor, Cpu, Mic, MicOff, Globe,
+  Brain, Dna, Swords, Sliders, Target
 } from 'lucide-react';
 import { AgentTraceResponse, RAGQueryResponse } from '../types';
 
@@ -31,6 +32,19 @@ interface ChatMessage {
 
 const BASE_HISTORY_KEY = 'varuna_agent_chat_history_v2';
 const MAX_STORED_MESSAGES = 40;
+
+const VOICE_LANGUAGES = [
+  { code: 'auto', label: 'Auto Detect (Multilingual)', flag: '🌐' },
+  { code: 'mr-IN', label: 'मराठी (Marathi)', flag: '🇮🇳' },
+  { code: 'hi-IN', label: 'हिन्दी (Hindi)', flag: '🇮🇳' },
+  { code: 'en-IN', label: 'English (India)', flag: '🇮🇳' },
+  { code: 'ta-IN', label: 'தமிழ் (Tamil)', flag: '🇮🇳' },
+  { code: 'te-IN', label: 'తెలుగు (Telugu)', flag: '🇮🇳' },
+  { code: 'kn-IN', label: 'ಕನ್ನಡ (Kannada)', flag: '🇮🇳' },
+  { code: 'ml-IN', label: 'മലയാളം (Malayalam)', flag: '🇮🇳' },
+  { code: 'bn-IN', label: 'বাংলা (Bengali)', flag: '🇮🇳' },
+  { code: 'gu-IN', label: 'ગુજરાતી (Gujarati)', flag: '🇮🇳' },
+];
 
 // Returns a user-scoped localStorage key so each account has isolated chat history
 const getUserChatKey = (username?: string) =>
@@ -167,11 +181,18 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
   const [ragQuery, setRagQuery] = useState<string>('');
   const [chatLoading, setChatLoading] = useState<boolean>(false);
   const [ragLoading, setRagLoading] = useState<boolean>(false);
-  const [activeTraceTab, setActiveTraceTab] = useState<Record<string, 'dag' | 'evidence' | 'pfz' | 'departure'>>({});
+  const [activeTraceTab, setActiveTraceTab] = useState<Record<string, 'dag' | 'evidence' | 'pfz' | 'departure' | 'why' | 'dna' | 'dissent' | 'timeline' | 'triggers'>>({});
 
   // Audio Speech synthesis state
   const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Voice to Text (Speech Recognition) state
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [speechLang, setSpeechLang] = useState<string>('auto');
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const [isLangMenuOpen, setIsLangMenuOpen] = useState<boolean>(false);
+  const recognitionRef = useRef<any>(null);
 
   // Build the welcome message for the current user
   const buildWelcome = (user?: string): ChatMessage => ({
@@ -286,7 +307,79 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
           text: message.text
         }));
 
-      const traceRes = await onChatAgent(queryToUse, lat, lon, conversationHistory);
+      // Extract coordinates if user explicitly stated them in query
+      let queryLat = lat;
+      let queryLon = lon;
+      const devanagariDigits: Record<string, string> = {
+        '०': '0', '१': '1', '२': '2', '३': '3', '४': '4',
+        '५': '5', '६': '6', '७': '7', '८': '8', '९': '9'
+      };
+      const normalizedQuery = queryToUse.replace(/[०-९]/g, d => devanagariDigits[d] || d);
+      const coordMatch = normalizedQuery.match(/(?:lat(?:itude)?\s*[:=]?\s*)?(-?\d+(?:\.\d+)?)\s*(?:°|deg)?\s*([NSns])?\s*[,;\s/|]+\s*(?:lon(?:gitude)?\s*[:=]?\s*)?(-?\d+(?:\.\d+)?)\s*(?:°|deg)?\s*([EWew])?/i);
+      if (coordMatch) {
+        let pLat = parseFloat(coordMatch[1]);
+        const latHemi = (coordMatch[2] || '').toUpperCase();
+        if (latHemi === 'S') pLat = -Math.abs(pLat);
+        else if (latHemi === 'N') pLat = Math.abs(pLat);
+
+        let pLon = parseFloat(coordMatch[3]);
+        const lonHemi = (coordMatch[4] || '').toUpperCase();
+        if (lonHemi === 'W') pLon = -Math.abs(pLon);
+        else if (lonHemi === 'E') pLon = Math.abs(pLon);
+
+        if (!isNaN(pLat) && !isNaN(pLon) && pLat >= -90 && pLat <= 90 && pLon >= -180 && pLon <= 180) {
+          queryLat = Number(pLat.toFixed(4));
+          queryLon = Number(pLon.toFixed(4));
+        }
+      } else {
+        const qLower = normalizedQuery.toLowerCase();
+        const coastalCities: Record<string, [number, number]> = {
+          'kanyakumari': [8.0883, 77.5385],
+          'कन्याकुमारी': [8.0883, 77.5385],
+          'கன்னியாகுமரி': [8.0883, 77.5385],
+          'mumbai': [18.9667, 72.8333],
+          'bombay': [18.9667, 72.8333],
+          'मुंबई': [18.9667, 72.8333],
+          'ratnagiri': [16.9902, 73.2980],
+          'रत्नागिरी': [16.9902, 73.2980],
+          'goa': [15.4989, 73.8278],
+          'panaji': [15.4989, 73.8278],
+          'गोवा': [15.4989, 73.8278],
+          'rameshwaram': [9.2876, 79.3129],
+          'रामेश्वरम': [9.2876, 79.3129],
+          'kochi': [9.9667, 76.2667],
+          'cochin': [9.9667, 76.2667],
+          'कोची': [9.9667, 76.2667],
+          'chennai': [13.0827, 80.2707],
+          'चेन्नई': [13.0827, 80.2707],
+          'mangalore': [12.9242, 74.8190],
+          'visakhapatnam': [17.6868, 83.2185],
+          'vizag': [17.6868, 83.2185],
+          'paradip': [20.3165, 86.6114],
+          'kolkata': [22.0257, 88.0583],
+          'veraval': [20.9000, 70.3667],
+          'kandla': [23.0033, 70.2189],
+          'alibaug': [18.6414, 72.8722],
+          'malvan': [16.0558, 73.4668],
+          'karwar': [14.8136, 74.1298],
+          'porbandar': [21.6417, 69.6293],
+          'daman': [20.3974, 72.8328],
+          'diu': [20.7144, 70.9874],
+          'puri': [19.8135, 85.8312],
+          'port blair': [11.6234, 92.7265],
+          'andaman': [11.6234, 92.7265],
+          'lakshadweep': [10.5667, 72.6417]
+        };
+        for (const [cityName, coords] of Object.entries(coastalCities)) {
+          if (qLower.includes(cityName)) {
+            queryLat = coords[0];
+            queryLon = coords[1];
+            break;
+          }
+        }
+      }
+
+      const traceRes = await onChatAgent(queryToUse, queryLat, queryLon, conversationHistory);
       const assistantMsg: ChatMessage = {
         id: `asst_${Date.now()}`,
         sender: 'assistant',
@@ -349,6 +442,101 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
       utterance.onerror = () => setIsSpeaking(false);
       setIsSpeaking(true);
       window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // Clean up speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.abort();
+        } catch { /* ignore */ }
+      }
+    };
+  }, []);
+
+  const toggleListening = () => {
+    if (isListening) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch { /* ignore */ }
+      }
+      setIsListening(false);
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      setSpeechError('Voice recognition is not supported in this browser. Please use Chrome, Edge, or Safari.');
+      setTimeout(() => setSpeechError(null), 5000);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+
+      if (speechLang !== 'auto') {
+        recognition.lang = speechLang;
+      } else {
+        recognition.lang = navigator.language || 'en-IN';
+      }
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setSpeechError(null);
+      };
+
+      recognition.onresult = (event: any) => {
+        let interimText = '';
+        let finalText = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalText += transcript;
+          } else {
+            interimText += transcript;
+          }
+        }
+
+        const currentText = finalText || interimText;
+        if (currentText.trim()) {
+          if (activeSubMode === 'chat') {
+            setChatQuery(currentText);
+          } else {
+            setRagQuery(currentText);
+          }
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn('[VARUNA Voice] Speech recognition error:', event.error);
+        if (event.error === 'not-allowed') {
+          setSpeechError('Microphone access denied. Please allow microphone permissions.');
+        } else if (event.error !== 'no-speech') {
+          setSpeechError(`Voice error: ${event.error}`);
+        }
+        setIsListening(false);
+        setTimeout(() => setSpeechError(null), 4000);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error('Failed to start speech recognition:', err);
+      setIsListening(false);
+      setSpeechError('Unable to access microphone');
+      setTimeout(() => setSpeechError(null), 4000);
     }
   };
 
@@ -500,6 +688,54 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
                         </button>
                       )}
 
+                      {trace.why_engine && (
+                        <button
+                          onClick={() => setActiveTraceTab(prev => ({ ...prev, [msg.id]: 'why' }))}
+                          className={`px-2.5 py-1 rounded-lg font-bold flex items-center space-x-1 transition-all ${
+                            msgTab === 'why' ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Brain className="w-3 h-3" />
+                          <span>Marine WHY</span>
+                        </button>
+                      )}
+
+                      {trace.decision_dna && (
+                        <button
+                          onClick={() => setActiveTraceTab(prev => ({ ...prev, [msg.id]: 'dna' }))}
+                          className={`px-2.5 py-1 rounded-lg font-bold flex items-center space-x-1 transition-all ${
+                            msgTab === 'dna' ? 'bg-indigo-600 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Dna className="w-3 h-3" />
+                          <span>🧬 Decision DNA</span>
+                        </button>
+                      )}
+
+                      {trace.agent_dissent && (
+                        <button
+                          onClick={() => setActiveTraceTab(prev => ({ ...prev, [msg.id]: 'dissent' }))}
+                          className={`px-2.5 py-1 rounded-lg font-bold flex items-center space-x-1 transition-all ${
+                            msgTab === 'dissent' ? 'bg-rose-600 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <Swords className="w-3 h-3" />
+                          <span>⚔️ Agent Dissent</span>
+                        </button>
+                      )}
+
+                      {trace.timeline && (
+                        <button
+                          onClick={() => setActiveTraceTab(prev => ({ ...prev, [msg.id]: 'timeline' }))}
+                          className={`px-2.5 py-1 rounded-lg font-bold flex items-center space-x-1 transition-all ${
+                            msgTab === 'timeline' ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-900 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          <History className="w-3 h-3" />
+                          <span>⏳ Timeline</span>
+                        </button>
+                      )}
+
                       <button
                         onClick={() => setActiveTraceTab(prev => ({ ...prev, [msg.id]: 'evidence' }))}
                         className={`px-2.5 py-1 rounded-lg font-bold flex items-center space-x-1 transition-all ${
@@ -644,6 +880,138 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
                         </div>
                       </div>
                     )}
+
+                    {/* Tab: Marine WHY Engine */}
+                    {msgTab === 'why' && trace.why_engine && (
+                      <div className="bg-slate-950 p-3.5 rounded-2xl border border-purple-900/40 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-purple-400 text-[10px] uppercase font-mono tracking-wider">
+                            Marine WHY Engine — Causal Reasoning
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            trace.why_engine.recommendation === 'RECOMMENDED' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                            trace.why_engine.recommendation === 'CAUTION' ? 'bg-amber-950 text-amber-400 border border-amber-800' :
+                            'bg-red-950 text-red-400 border border-red-800'
+                          }`}>
+                            {trace.why_engine.recommendation}
+                          </span>
+                        </div>
+                        <p className="text-slate-300 leading-relaxed">{trace.why_engine.summary_why}</p>
+                        <div className="space-y-1 pt-1">
+                          <div className="font-bold text-slate-400 text-[10px] uppercase font-mono">Primary Contributing Factors:</div>
+                          {trace.why_engine.primary_factors.map((factor, fIdx) => (
+                            <div key={fIdx} className="text-slate-300 flex items-start space-x-1.5">
+                              <span className="text-purple-400 font-bold">•</span>
+                              <span>{factor}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="pt-2 border-t border-slate-900 flex justify-between text-[10px] text-slate-400">
+                          <span>Supporting: <b>{trace.why_engine.supporting_agents?.join(', ') || 'All'}</b></span>
+                          <span>Confidence: <b>{Math.round(trace.why_engine.confidence * 100)}%</b></span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tab: Decision DNA */}
+                    {msgTab === 'dna' && trace.decision_dna && (
+                      <div className="bg-slate-950 p-3.5 rounded-2xl border border-indigo-900/40 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-indigo-400 text-[10px] uppercase font-mono tracking-wider">
+                            🧬 Decision DNA Blueprint ({trace.decision_dna.decision_id})
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-400">
+                            Risk: {Math.round(trace.decision_dna.risk_score)}/100 | Conf: {Math.round(trace.decision_dna.confidence * 100)}%
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {Object.entries(trace.decision_dna.agents || {}).map(([ag, st]) => (
+                            <div key={ag} className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-center">
+                              <div className="text-[10px] font-mono text-slate-400 uppercase">{ag}</div>
+                              <div className={`text-[11px] font-bold ${
+                                st === 'SAFE' || st === 'RECOMMENDED' ? 'text-emerald-400' :
+                                st === 'DANGER' || st === 'AVOID' ? 'text-red-400' : 'text-amber-400'
+                              }`}>{st}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="space-y-1 pt-1">
+                          <div className="font-bold text-slate-400 text-[10px] uppercase font-mono">Major Factors:</div>
+                          {trace.decision_dna.major_factors.map((m, mIdx) => (
+                            <div key={mIdx} className="text-slate-300">• {m}</div>
+                          ))}
+                        </div>
+                        {trace.what_would_change && (
+                          <div className="p-2 rounded-xl bg-indigo-950/30 border border-indigo-900/40 text-[11px] text-slate-300 space-y-1">
+                            <div className="font-bold text-indigo-300">Conditions that would change this decision:</div>
+                            {trace.what_would_change.slice(0, 2).map((tr, trIdx) => (
+                              <div key={trIdx}>• {tr}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Tab: Agent Dissent & Conflict Resolution */}
+                    {msgTab === 'dissent' && trace.agent_dissent && (
+                      <div className="bg-slate-950 p-3.5 rounded-2xl border border-rose-900/40 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-rose-400 text-[10px] uppercase font-mono tracking-wider">
+                            ⚔️ Agent Dissent & Multi-Agent Arbitration
+                          </span>
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            trace.agent_dissent.has_conflict ? 'bg-amber-950 text-amber-400 border border-amber-800' : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          }`}>
+                            {trace.agent_dissent.has_conflict ? 'CONFLICT RESOLVED' : 'UNANIMOUS'}
+                          </span>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 leading-relaxed">
+                          {trace.agent_dissent.conflict_detected}
+                        </div>
+                        {trace.agent_dissent.has_conflict && (
+                          <div className="p-2.5 rounded-xl bg-rose-950/20 border border-rose-900/40 text-slate-300 space-y-1">
+                            <div className="font-bold text-rose-300 text-[11px]">Orchestrator Resolution: {trace.agent_dissent.resolution_strategy}</div>
+                            <div className="text-[11px] text-slate-400">{trace.agent_dissent.resolution_rationale}</div>
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          {trace.agent_dissent.agent_opinions?.slice(0, 4).map((op, oIdx) => (
+                            <div key={oIdx} className="flex items-center justify-between p-1.5 rounded-lg bg-slate-900/50 text-[11px]">
+                              <span className="font-bold text-slate-200">{op.agent}</span>
+                              <span className="font-mono text-slate-400">{op.decision}</span>
+                              <span className="text-slate-400 truncate max-w-[200px]">{op.key_evidence}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Tab: Marine Timeline */}
+                    {msgTab === 'timeline' && trace.timeline && (
+                      <div className="bg-slate-950 p-3.5 rounded-2xl border border-blue-900/40 space-y-2.5 text-xs">
+                        <div className="font-bold text-blue-400 text-[10px] uppercase font-mono tracking-wider">
+                          ⏳ Marine Temporal Timeline: Past → Present → Future
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          {trace.timeline.timeline_stages?.map((stage, stIdx) => (
+                            <div key={stIdx} className="p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1">
+                              <div className="flex justify-between font-bold">
+                                <span className="text-white">{stage.stage}</span>
+                                <span className={`text-[10px] ${
+                                  stage.risk_level === 'SAFE' ? 'text-emerald-400' :
+                                  stage.risk_level === 'DANGER' ? 'text-red-400' : 'text-amber-400'
+                                }`}>{stage.risk_level} ({Math.round(stage.risk_score)})</span>
+                              </div>
+                              <div className="text-[10px] text-slate-400">Wave: {stage.wave_height_m}m | Wind: {stage.wind_speed_kmh} km/h</div>
+                              <div className="text-[10px] text-slate-500 italic">{stage.notes}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-[11px] text-blue-300 font-medium p-2 rounded-lg bg-blue-950/30 border border-blue-900/40">
+                          {trace.timeline.temporal_reasoning}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -681,8 +1049,87 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Bar */}
-      <div className="bg-[#07192c] border border-slate-800 p-2.5 rounded-3xl flex items-center space-x-2 shadow-xl">
+      {/* Voice-to-Text Live Listening Indicator */}
+      {isListening && (
+        <div className="flex items-center justify-between px-4 py-2.5 bg-gradient-to-r from-red-950/90 via-slate-900 to-blue-950/90 border border-red-500/40 rounded-2xl animate-pulse text-xs text-red-200 shadow-xl backdrop-blur-md">
+          <div className="flex items-center space-x-2.5">
+            <span className="relative flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+            </span>
+            <span className="font-bold text-white tracking-wide">Listening...</span>
+            <span className="text-slate-300 hidden sm:inline">
+              Speak in {VOICE_LANGUAGES.find(l => l.code === speechLang)?.label || 'any language'} (e.g. Marathi, Hindi, English)
+            </span>
+          </div>
+          <div className="flex items-center space-x-1.5">
+            <span className="w-1 h-3 bg-red-400 rounded-full animate-bounce [animation-delay:0ms]"></span>
+            <span className="w-1 h-5 bg-red-400 rounded-full animate-bounce [animation-delay:150ms]"></span>
+            <span className="w-1 h-3 bg-red-400 rounded-full animate-bounce [animation-delay:300ms]"></span>
+            <span className="w-1 h-6 bg-red-400 rounded-full animate-bounce [animation-delay:450ms]"></span>
+            <button
+              onClick={toggleListening}
+              className="ml-3 px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/40 text-red-100 text-[11px] font-bold border border-red-500/50 transition-colors"
+            >
+              Done Speaking
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Voice Error Notification */}
+      {speechError && (
+        <div className="px-4 py-2 bg-red-950/80 border border-red-500/40 rounded-2xl text-xs text-red-300 flex items-center justify-between">
+          <span>{speechError}</span>
+          <button onClick={() => setSpeechError(null)} className="text-red-400 hover:text-white text-xs font-bold ml-2">✕</button>
+        </div>
+      )}
+
+      {/* ChatGPT-style Input Bar with Voice-to-Text and Send Button */}
+      <div className="bg-[#07192c] border border-slate-800 p-2 sm:p-2.5 rounded-full flex items-center space-x-2 shadow-2xl relative">
+        {/* Language selector for Voice-to-Text */}
+        <div className="relative pl-1">
+          <button
+            type="button"
+            onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
+            className="px-2.5 py-1.5 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium flex items-center space-x-1.5 border border-slate-700/60 transition-colors"
+            title="Choose Voice-to-Text Language"
+          >
+            <span>{VOICE_LANGUAGES.find(l => l.code === speechLang)?.flag || '🌐'}</span>
+            <span className="hidden sm:inline text-[11px] font-mono font-semibold">{speechLang.toUpperCase().split('-')[0]}</span>
+          </button>
+          
+          {isLangMenuOpen && (
+            <div className="absolute bottom-full mb-2 left-0 w-60 bg-slate-900 border border-slate-700 rounded-2xl p-1.5 shadow-2xl z-50 text-xs space-y-0.5">
+              <div className="px-2.5 py-1 text-[10px] font-bold uppercase text-slate-400 font-mono tracking-wider">
+                Voice Input Language
+              </div>
+              {VOICE_LANGUAGES.map(lang => (
+                <button
+                  key={lang.code}
+                  type="button"
+                  onClick={() => {
+                    setSpeechLang(lang.code);
+                    setIsLangMenuOpen(false);
+                  }}
+                  className={`w-full text-left px-2.5 py-1.5 rounded-xl flex items-center justify-between text-xs transition-colors ${
+                    speechLang === lang.code
+                      ? 'bg-blue-600 text-white font-bold'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <span className="flex items-center space-x-2">
+                    <span>{lang.flag}</span>
+                    <span>{lang.label}</span>
+                  </span>
+                  {speechLang === lang.code && <Check className="w-3.5 h-3.5 text-white" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Text Input */}
         <input
           type="text"
           value={activeSubMode === 'chat' ? chatQuery : ragQuery}
@@ -693,18 +1140,44 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
             }
           }}
           placeholder={
-            activeSubMode === 'chat'
+            isListening
+              ? '🎙️ Listening... speak now...'
+              : activeSubMode === 'chat'
               ? 'Ask VARUNA in English, हिन्दी, मराठी, தமிழ், తెలుగు, ಕನ್ನಡ, മലയാളം, বাংলা...'
               : 'Search INCOIS, DG Shipping circulars & regulatory notices...'
           }
-          className="flex-1 bg-transparent px-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none"
+          className="flex-1 bg-transparent px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none font-medium"
         />
+
+        {/* Voice-to-Text Microphone Button (matching screenshot) */}
         <button
-          onClick={() => activeSubMode === 'chat' ? handleSendChat() : handleSearchRAG()}
-          disabled={chatLoading || ragLoading}
-          className="p-3 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold hover:shadow-lg hover:shadow-cyan-500/25 transition-all disabled:opacity-50"
+          type="button"
+          onClick={toggleListening}
+          className={`p-2 rounded-full transition-all flex items-center justify-center ${
+            isListening
+              ? 'bg-red-500 text-white shadow-lg shadow-red-500/50 animate-pulse scale-105'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
+          }`}
+          title={isListening ? 'Stop listening (Voice-to-Text)' : 'Voice to Text (Click and speak query)'}
+          aria-label="Voice to text"
         >
-          {activeSubMode === 'chat' ? <Send className="w-4 h-4" /> : <Search className="w-4 h-4" />}
+          {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+        </button>
+
+        {/* Circular Blue Send Button (matching screenshot) */}
+        <button
+          type="button"
+          onClick={() => activeSubMode === 'chat' ? handleSendChat() : handleSearchRAG()}
+          disabled={chatLoading || ragLoading || (!chatQuery.trim() && activeSubMode === 'chat') || (!ragQuery.trim() && activeSubMode === 'rag')}
+          className="w-10 h-10 rounded-full bg-[#0084ff] hover:bg-[#0073e6] active:scale-95 text-white flex items-center justify-center transition-all shadow-md shadow-blue-500/30 flex-shrink-0 disabled:opacity-40 disabled:hover:bg-[#0084ff]"
+          title="Send Query"
+          aria-label="Send Query"
+        >
+          {chatLoading || ragLoading ? (
+            <RefreshCw className="w-4 h-4 animate-spin" />
+          ) : (
+            <ArrowRight className="w-5 h-5 stroke-[2.5]" />
+          )}
         </button>
       </div>
     </div>

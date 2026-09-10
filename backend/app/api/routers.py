@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db, engine, Base
 from app.core.config import settings
 from app.core.security import get_password_hash, verify_password, create_access_token, decode_access_token
-from app.models.database_models import UserDB, AlertDB, AdvisoryDB, RiskAssessmentDB, SimulationRunDB, FeedbackDB, OTPChallengeDB
+from app.models.database_models import (
+    UserDB, AlertDB, AdvisoryDB, RiskAssessmentDB, SimulationRunDB, FeedbackDB, 
+    OTPChallengeDB, UserSessionDB, QueryHistoryDB, ActivityLogDB
+)
 from app.models.schemas import (
     UserCreate, UserResponse, LoginRequest, Token, OTPRequest, OTPVerifyRequest,
     RiskAssessmentResponse, RouteComparisonResponse, AnomalyEvent,
@@ -20,9 +23,13 @@ from app.models.schemas import (
     LocationAnalyseRequest, LocationAnalyseResponse,
     AreaScanRequest, AreaScanResponse,
     RouteAnalyseRequest, RouteAnalyseResponse,
-    AgentStatusItem
+    AgentStatusItem,
+    MarineWhyEngine, DecisionDNA, AgentDissentResponse, MarineTimelineResponse,
+    MarineMissionProfileRequest, MarineMissionProfileResponse,
+    WhatIfEnhancedRequest, WhatIfEnhancedResponse
 )
 
+from app.agents.collaborative_engine import CollaborativeAIEngine
 from app.agents.master_agent import MasterAgent
 from app.fusion.fusion_engine import DataFusionEngine
 from app.providers.openmeteo import OpenMeteoMarineProvider, OpenMeteoWeatherProvider
@@ -151,7 +158,20 @@ def verify_login_otp(req: OTPVerifyRequest, db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.email == email, UserDB.is_active == True).first()
     if not user:
         raise HTTPException(status_code=404, detail="User account is no longer active")
+    
     challenge.consumed_at = now
+    
+    # Update last login
+    user.last_login = now
+    
+    # Create user session
+    session = UserSessionDB(user_id=user.id, login_time=now)
+    db.add(session)
+    
+    # Create activity log
+    activity = ActivityLogDB(user_id=user.id, action="LOGIN_OTP")
+    db.add(activity)
+    
     db.commit()
     token = create_access_token({"sub": user.username, "role": user.role})
     return Token(access_token=token, token_type="bearer", user=user)
@@ -162,14 +182,15 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
     db_user = db.query(UserDB).filter(UserDB.username == user_in.username).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    
-    hashed_pw = get_password_hash(user_in.password)
+
+    if db.query(UserDB).filter(UserDB.email == user_in.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
     new_user = UserDB(
         username=user_in.username,
         email=user_in.email,
-        hashed_password=hashed_pw,
+        hashed_password=get_password_hash(user_in.password),
         role=user_in.role,
-        full_name=user_in.full_name
+        full_name=user_in.full_name,
     )
     db.add(new_user)
     db.commit()
@@ -178,25 +199,83 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/auth/login", response_model=Token)
 def login_user(req: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(UserDB).filter(UserDB.username == req.username).first()
-    if not user or not verify_password(req.password, user.hashed_password):
-        # Demo bypass for convenience during evaluation
-        if req.username.lower() in ["fisherman", "shipping", "disaster", "researcher", "admin"]:
-            user_resp = UserResponse(
-                id=1, username=req.username, email=f"{req.username}@varuna.gov.in",
-                role=req.username.capitalize(), full_name=f"SIH Demo {req.username.capitalize()}",
-                is_active=True, created_at=datetime.now(timezone.utc)
-            )
-            token = create_access_token({"sub": req.username, "role": req.username.capitalize()})
-            _send_login_notification(user_resp.email, req.username, db)
-            return Token(access_token=token, token_type="bearer", user=user_resp)
+    if "@" in req.username:
+        email = req.username
+        user = db.query(UserDB).filter(UserDB.email == email).first()
+    else:
+        user = db.query(UserDB).filter(UserDB.username == req.username).first()
+        if user:
+            email = user.email
+        else:
+            email = None
             
+    if not user or not verify_password(req.password, user.hashed_password):
+        # Demo accounts stay usable in a newly initialized local database.
+        if req.username.lower() in ["fisherman", "shipping", "disaster", "researcher", "admin"] and req.password == "demo123":
+            role = req.username.capitalize()
+            user_resp = UserResponse(
+                id=0, username=req.username, email=f"{req.username}@varuna.gov.in",
+                role=role, full_name=f"SIH Demo {role}",
+                is_active=True, created_at=datetime.now(timezone.utc),
+            )
+            token = create_access_token({"sub": req.username, "role": role})
+            return Token(access_token=token, token_type="bearer", user=user_resp)
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
+
+    now = datetime.now(timezone.utc)
+    user.last_login = now
+    db.add(UserSessionDB(user_id=user.id, login_time=now))
+    db.add(ActivityLogDB(user_id=user.id, action="LOGIN_PASSWORD"))
+    db.commit()
     token = create_access_token({"sub": user.username, "role": user.role})
     if user.notification_email:
         _send_login_notification(user.email, user.username, db, user.id)
     return Token(access_token=token, token_type="bearer", user=user)
+
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+security = HTTPBearer()
+
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)) -> UserDB:
+    payload = decode_access_token(credentials.credentials)
+    username = payload.get("sub") if payload else None
+    user = db.query(UserDB).filter(UserDB.username == username).first() if username else None
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return user
+
+from fastapi.security.utils import get_authorization_scheme_param
+from fastapi import Request
+
+def get_current_user_optional(request: Request, db: Session = Depends(get_db)) -> Optional[UserDB]:
+    authorization = request.headers.get("Authorization")
+    if not authorization:
+        return None
+    scheme, token = get_authorization_scheme_param(authorization)
+    if scheme.lower() != "bearer":
+        return None
+    
+    payload = decode_access_token(token)
+    username = payload.get("sub") if payload else None
+    return db.query(UserDB).filter(UserDB.username == username).first() if username else None
+
+@router.post("/auth/logout")
+def logout(current_user: UserDB = Depends(get_current_user), db: Session = Depends(get_db)):
+    now = datetime.now(timezone.utc)
+    
+    # Find active session and update logout_time
+    session = db.query(UserSessionDB).filter(
+        UserSessionDB.user_id == current_user.id,
+        UserSessionDB.logout_time.is_(None)
+    ).order_by(UserSessionDB.login_time.desc()).first()
+    
+    if session:
+        session.logout_time = now
+        
+    activity = ActivityLogDB(user_id=current_user.id, action="LOGOUT")
+    db.add(activity)
+    db.commit()
+    
+    return {"message": "Logged out successfully"}
 
 
 @router.get("/auth/otp-demo-peek")
@@ -495,15 +574,68 @@ def get_historical_trends(hours: int = 24, lat: float = 18.9667, lon: float = 72
 def run_whatif_simulation(req: WhatIfRequest):
     return simulation_engine.run_simulation(req)
 
+@router.post("/marine/why", response_model=MarineWhyEngine)
+def get_marine_why(payload: Dict[str, Any]):
+    lat = float(payload.get("lat", payload.get("latitude", 18.9667)))
+    lon = float(payload.get("lon", payload.get("longitude", 72.8333)))
+    mode = payload.get("mode", "HYBRID")
+    analysis = master_agent.analyse_location(lat, lon, mode)
+    return analysis["why_engine"]
+
+@router.post("/marine/decision-dna", response_model=DecisionDNA)
+def get_marine_decision_dna(payload: Dict[str, Any]):
+    lat = float(payload.get("lat", payload.get("latitude", 18.9667)))
+    lon = float(payload.get("lon", payload.get("longitude", 72.8333)))
+    mode = payload.get("mode", "HYBRID")
+    analysis = master_agent.analyse_location(lat, lon, mode)
+    return analysis["decision_dna"]
+
+@router.post("/marine/agent-dissent", response_model=AgentDissentResponse)
+def get_agent_dissent(payload: Dict[str, Any]):
+    lat = float(payload.get("lat", payload.get("latitude", 18.9667)))
+    lon = float(payload.get("lon", payload.get("longitude", 72.8333)))
+    mode = payload.get("mode", "HYBRID")
+    analysis = master_agent.analyse_location(lat, lon, mode)
+    return analysis["agent_dissent"]
+
+@router.post("/marine/timeline", response_model=MarineTimelineResponse)
+def get_marine_timeline(payload: Dict[str, Any]):
+    lat = float(payload.get("lat", payload.get("latitude", 18.9667)))
+    lon = float(payload.get("lon", payload.get("longitude", 72.8333)))
+    mode = payload.get("mode", "HYBRID")
+    analysis = master_agent.analyse_location(lat, lon, mode)
+    return analysis["timeline"]
+
+@router.post("/mission/analyze", response_model=MarineMissionProfileResponse)
+def analyze_mission_profile(req: MarineMissionProfileRequest):
+    analysis = master_agent.analyse_location(req.latitude, req.longitude, req.mode)
+    return CollaborativeAIEngine.evaluate_mission_profile(
+        req=req,
+        current_conditions=analysis["current_conditions"],
+        agent_findings=analysis["agent_findings"],
+        base_risk_score=analysis["risk_score"],
+        location_name=analysis["location_name"]
+    )
+
+@router.post("/scenario/simulate-enhanced", response_model=WhatIfEnhancedResponse)
+def run_whatif_enhanced(req: WhatIfEnhancedRequest):
+    analysis = master_agent.analyse_location(req.lat, req.lon, "HYBRID")
+    return CollaborativeAIEngine.evaluate_what_if_enhanced(
+        req=req,
+        current_conditions=analysis["current_conditions"],
+        base_risk_score=analysis["risk_score"]
+    )
+
 @router.post("/chat", response_model=AgentTraceResponse)
-def chat_with_agent(payload: Dict[str, Any]):
+def chat_with_agent(payload: Dict[str, Any], current_user: Optional[UserDB] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
     query = payload.get("query", "What is the marine risk near Mumbai tomorrow?")
     lat = float(payload.get("lat", 18.9667))
     lon = float(payload.get("lon", 72.8333))
     mode = payload.get("mode", "HYBRID")
     conversation_history = payload.get("conversation_history", [])
     session_id = payload.get("session_id", "varuna_session")
-    return master_agent.process_query(
+    
+    response = master_agent.process_query(
         query,
         lat=lat,
         lon=lon,
@@ -511,6 +643,24 @@ def chat_with_agent(payload: Dict[str, Any]):
         conversation_history=conversation_history,
         session_id=session_id
     )
+    
+    if current_user:
+        lang = getattr(response, "detected_language", "en") if hasattr(response, "detected_language") else (response.get("detected_language", "en") if isinstance(response, dict) else "en")
+        history = QueryHistoryDB(
+            user_id=current_user.id,
+            query=query,
+            language=lang,
+            latitude=lat,
+            longitude=lon,
+            response_status="SUCCESS"
+        )
+        db.add(history)
+        
+        activity = ActivityLogDB(user_id=current_user.id, action="QUERY_CHAT")
+        db.add(activity)
+        db.commit()
+        
+    return response
 
 @router.get("/geofence/layers")
 def get_geofence_layers():
@@ -555,8 +705,23 @@ def get_supported_languages():
     return LanguageService.SUPPORTED_LANGUAGES
 
 @router.post("/rag", response_model=RAGQueryResponse)
-def query_rag(req: RAGQueryRequest):
-    return MarineKnowledgeRAG.query_knowledge(req.question, top_k=req.top_k)
+def query_rag(req: RAGQueryRequest, current_user: Optional[UserDB] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    response = MarineKnowledgeRAG.query_knowledge(req.question, top_k=req.top_k)
+    
+    if current_user:
+        history = QueryHistoryDB(
+            user_id=current_user.id,
+            query=req.question,
+            language="en",
+            response_status="SUCCESS"
+        )
+        db.add(history)
+        
+        activity = ActivityLogDB(user_id=current_user.id, action="QUERY_RAG")
+        db.add(activity)
+        db.commit()
+        
+    return response
 
 @router.post("/reports")
 def generate_report(payload: Dict[str, Any]):

@@ -1,5 +1,14 @@
 import os
+import sys
 from contextlib import asynccontextmanager
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="backslashreplace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="backslashreplace")
+    except Exception:
+        pass
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -37,7 +46,7 @@ def _seed_demo_users() -> None:
                     is_active=True,
                 ))
         db.commit()
-        print("[VARUNA] Demo user accounts seeded ✓")
+        print("[VARUNA] Demo user accounts seeded")
     except Exception as e:
         print(f"[VARUNA] Demo seeding warning: {e}")
         db.rollback()
@@ -76,8 +85,11 @@ reports_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "sta
 os.makedirs(reports_dir, exist_ok=True)
 app.mount("/static/reports", StaticFiles(directory=reports_dir), name="static_reports")
 
-# Include main API router
+# Include main API routers
 app.include_router(api_router, prefix="/api")
+
+from app.api.admin_routers import router as admin_router
+app.include_router(admin_router, prefix="/api", tags=["admin"])
 
 @app.get("/")
 def root():
@@ -93,4 +105,3 @@ def root():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
-
