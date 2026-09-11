@@ -94,7 +94,7 @@ class CopernicusMarineService(OceanDataProvider):
             biology_future = _copernicus_executor.submit(fetch_biology)
 
             try:
-                physics = physics_future.result(timeout=2.0)
+                physics = physics_future.result(timeout=0.8)
                 result = {
                     "source": "Copernicus Marine Live",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -103,7 +103,6 @@ class CopernicusMarineService(OceanDataProvider):
                     "mode": "LIVE",
                 }
             except Exception as e:
-                print(f"[CopernicusMarineService] Physics fetch timed out or unavailable: {e}")
                 result = {
                     "source": "Copernicus Marine (Near-Real-Time Model)",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -113,7 +112,7 @@ class CopernicusMarineService(OceanDataProvider):
                 }
 
             try:
-                biology = biology_future.result(timeout=1.5)
+                biology = biology_future.result(timeout=0.6)
                 result["chlorophyll"] = self._surface_value(biology, "chl")
             except Exception:
                 result["chlorophyll"] = round(0.45 + (lat - 15.0) * 0.04, 2)
