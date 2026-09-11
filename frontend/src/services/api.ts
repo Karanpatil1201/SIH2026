@@ -8,6 +8,7 @@ import {
   MarineMissionProfileRequest, MarineMissionProfileResponse,
   WhatIfEnhancedRequest, WhatIfEnhancedResponse
 } from '../types';
+import { cleanLatexSymbols } from '../utils/textSanitizer';
 
 export const getStoredApiUrl = (): string => {
   if (typeof window === 'undefined') return '';
@@ -759,9 +760,10 @@ Your task is to answer the user's specific query thoroughly, accurately, and nat
 - If the user asks in Hindi or Hinglish, answer in fluent, conversational Hindi/Hinglish.
 - If the user asks in Marathi, answer in Marathi.
 - If the user asks in English, answer in English.
-- If the question is about a road trip (e.g. Mumbai to Gokarna), discuss the route (NH48 / NH66), weather, travel duration, road conditions, and safety precautions.
+- If the question is about a road trip (e.g. Mumbai to Gokarna, Goa to Kolkata), discuss the route (e.g. NH48, NH16), weather, travel duration, road conditions, and safety precautions.
 - If the question is about marine, sea, fishing, or coastal weather, provide practical safety guidance citing wave/wind conditions.
-- Real-time environmental reference for this area: Location: ${locName} (${targetLat.toFixed(2)}°N, ${targetLon.toFixed(2)}°E), Sea Wave Height: ${waveHeight}m, Surface Wind: ${windSpeed} km/h, SST: ${sst}°C.`;
+- Real-time environmental reference for this area: Location: ${locName} (${targetLat.toFixed(2)}°N, ${targetLon.toFixed(2)}°E), Sea Wave Height: ${waveHeight}m, Surface Wind: ${windSpeed} km/h, SST: ${sst}°C.
+- IMPORTANT FORMATTING RULE: Never use LaTeX syntax or math codes like $\\rightarrow$, \\rightarrow, \\pm, etc. Always use clean Unicode characters (e.g. →, ±, °, ×). For routes, always write standard arrows like "गोवा → बेलगावी → हुबली" or "A → B".`;
 
         const payload = {
           contents: [
@@ -785,7 +787,7 @@ Your task is to answer the user's specific query thoroughly, accurately, and nat
               const data = await res.json();
               const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
               if (text && text.trim().length > 10) {
-                aiGeneratedAnswer = text.trim();
+                aiGeneratedAnswer = cleanLatexSymbols(text.trim());
                 break;
               }
             }

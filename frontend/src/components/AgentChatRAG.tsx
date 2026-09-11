@@ -50,9 +50,14 @@ const VOICE_LANGUAGES = [
 const getUserChatKey = (username?: string) =>
   username ? `${BASE_HISTORY_KEY}_${username}` : BASE_HISTORY_KEY;
 
+import { cleanLatexSymbols } from '../utils/textSanitizer';
+export { cleanLatexSymbols };
+
 const FormattedMessage: React.FC<{ content: string; isUser: boolean }> = ({ content, isUser }) => {
+  const sanitizedContent = cleanLatexSymbols(content);
+
   if (isUser) {
-    return <span className="font-medium text-white">{content}</span>;
+    return <span className="font-medium text-white">{sanitizedContent}</span>;
   }
 
   // Parse inline markdown tokens: bold (**text** or __text__), code (`text`), italic (*text* or _text_)
@@ -97,7 +102,7 @@ const FormattedMessage: React.FC<{ content: string; isUser: boolean }> = ({ cont
     return parts.length > 0 ? parts : [text];
   };
 
-  const lines = content.split('\n');
+  const lines = sanitizedContent.split('\n');
   const renderedElements: React.ReactNode[] = [];
 
   lines.forEach((line, idx) => {
@@ -435,7 +440,8 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
         setIsSpeaking(false);
         return;
       }
-      const plainText = text.replace(/[*#`]/g, '');
+      const cleaned = cleanLatexSymbols(text);
+      const plainText = cleaned.replace(/[*#`]/g, '');
       const utterance = new SpeechSynthesisUtterance(plainText);
       utterance.rate = 1.0;
       utterance.onend = () => setIsSpeaking(false);
@@ -541,7 +547,7 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
   };
 
   const handleCopyText = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(cleanLatexSymbols(text));
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };

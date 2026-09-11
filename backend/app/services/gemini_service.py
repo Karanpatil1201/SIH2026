@@ -31,6 +31,7 @@ Behavioral guidelines:
 6. Always mention data confidence and uncertainty when available.
 7. Format responses with markdown headers, bullet points, and bold for key values.
 8. Keep responses concise but comprehensive (200-400 words).
+9. NEVER use LaTeX math notation or raw commands like $\rightarrow$, \rightarrow, \leftarrow, \pm, \times, etc. Always output real Unicode symbols (e.g., →, ←, ±, °, ×). For routes or waypoint sequences, write "Point A → Point B".
 """
 
 RAG_SYSTEM_PROMPT = """You are VARUNA AI — a regulatory knowledge assistant specializing in Indian maritime law and ocean safety protocols.
@@ -43,7 +44,70 @@ Guidelines:
 4. If the documents don't fully answer the question, say so clearly.
 5. Structure your answer with bullet points for readability.
 6. Keep the answer focused and concise (100-250 words).
+7. Always use clean Unicode characters (e.g., →, ±, °) rather than raw LaTeX syntax.
 """
+
+import re
+
+
+def clean_latex_symbols(text: str) -> str:
+    """
+    Sanitizes raw LaTeX mathematical notation and arrow codes into clean Unicode symbols.
+    Prevents raw strings like `$\\rightarrow$` or `\\rightarrow` in AI chat advisories.
+    """
+    if not text:
+        return ""
+    out = text
+
+    # 1. Unwrap \\text{...} wrappers
+    out = re.sub(r"\\text\{([^}]*)\}", r"\1", out)
+
+    # 2. Multi-token dollar expressions containing arrows or math (e.g. $A \\rightarrow B$)
+    def _unwrap_math_dollars(m):
+        inner = m.group(1)
+        if re.search(r"\\(?:rightarrow|to|leftarrow|leftrightarrow|Rightarrow|Leftarrow|pm|times|approx|le|ge|degree)|[→←↔⇒⇐⇔]", inner):
+            return f" {inner} "
+        return m.group(0)
+
+    out = re.sub(r"\$([^$]+)\$", _unwrap_math_dollars, out)
+
+    # 3. Arrow replacements (dollar-wrapped or bare)
+    out = re.sub(r"\$?\s*\\(?:rightarrow|longrightarrow|to)\s*\$?|\$\s*->\s*\$", " → ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:leftarrow|longleftarrow|gets)\s*\$?|\$\s*<-\s*\$", " ← ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:leftrightarrow|longleftrightarrow)\s*\$?|\$\s*<->\s*\$", " ↔ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:Rightarrow|Longrightarrow|implies)\s*\$?|\$\s*=>\s*\$", " ⇒ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:Leftarrow|Longleftarrow)\s*\$?|\$\s*<=\s*\$", " ⇐ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:Leftrightarrow|Longleftrightarrow|iff)\s*\$?|\$\s*<=>\s*\$", " ⇔ ", out, flags=re.IGNORECASE)
+
+    # 4. Common mathematical & scientific notations
+    out = re.sub(r"\$?\s*\\(?:pm|plusminus)\s*\$?|\$\s*\+-\s*\$", " ± ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\times\s*\$?|\$\s*\*\s*\$", " × ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\div\s*\$", " ÷ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:approx|sim)\s*\$?|\$\s*~\s*\$", " ≈ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:neq|ne)\s*\$?|\$\s*!=\s*\$", " ≠ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:leq|le)\s*\$?|\$\s*<=\s*\$", " ≤ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:geq|ge)\s*\$?|\$\s*>=\s*\$", " ≥ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:degree|deg)\s*\$?|\^\{?\\circ\}?", "°", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\cdot\s*\$?|\$\s*\.\s*\$", " · ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\bullet\s*\$?|\$\s*\\\*\s*\$", " • ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:dots|ldots)\s*\$?|\$\s*\.\.\.\s*\$", "…", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\infty\s*\$?|\$\s*oo\s*\$", " ∞ ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:checkmark|cmark)\s*\$?", "✓", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\Delta\s*\$?|\$\s*Delta\s*\$", "Δ", out, flags=re.IGNORECASE)
+    out = re.sub(r"\$?\s*\\(?:mu|micro)\s*\$?|\$\s*mu\s*\$", "µ", out, flags=re.IGNORECASE)
+
+    # 5. Clean any residual dollar signs around arrows/symbols
+    out = re.sub(r"\$\s*([→←↔⇒⇐⇔±×÷≈≠≤≥°·•…∞✓Δµ])\s*\$", r" \1 ", out)
+    out = re.sub(r"\$\s*([^$]*[→←↔⇒⇐⇔±×÷≈≠≤≥°✓Δµ][^$]*)\s*\$", r" \1 ", out)
+
+    # 6. Clean orphan dollars around single words or arrows
+    out = re.sub(r"\$\s*([→←↔⇒⇐⇔])\s*", r" \1 ", out)
+    out = re.sub(r"\s*([→←↔⇒⇐⇔])\s*\$", r" \1 ", out)
+
+    # 7. Normalize punctuation spacing & double spaces
+    out = re.sub(r"\s+([।,.:;!?])", r"\1", out)
+    out = re.sub(r"[ \t]{2,}", " ", out)
+    return out.strip()
 
 
 class GeminiService:
@@ -173,7 +237,7 @@ class GeminiService:
 
             if response and response.text and response.text.strip():
                 return {
-                    "text": response.text.strip(),
+                    "text": clean_latex_symbols(response.text.strip()),
                     "gemini_called": True,
                     "gemini_skipped": False,
                     "skip_reason": None,
@@ -263,7 +327,7 @@ class GeminiService:
             )
 
             if response and response.text:
-                return response.text
+                return clean_latex_symbols(response.text.strip())
             else:
                 return self._build_fallback_rag_answer(question, retrieved_documents)
 
