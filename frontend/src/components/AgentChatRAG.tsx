@@ -755,7 +755,7 @@ export const AgentChatRAG: React.FC<AgentChatRAGProps> = ({ lat, lon, username, 
                         </div>
                         <div className="space-y-1.5">
                           {trace.execution_steps?.map((step, sIdx) => {
-                            const isDone = step.status === 'COMPLETED';
+                            const isDone = step.status === 'COMPLETED' || step.status === 'SUCCESS';
                             const isWarn = step.status === 'WARNING';
                             const isFall = step.status === 'FALLBACK';
                             return (
