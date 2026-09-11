@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Anchor, LayoutDashboard, Bot, BarChart3, Fish, Map,
-  Bell, Server, LogIn, LogOut, ChevronDown, Radio, Globe, LocateFixed, FileText, Brain
+  Bell, Server, LogIn, LogOut, ChevronDown, Radio, Globe, LocateFixed, FileText, Brain, ShieldCheck
 } from 'lucide-react';
 import { PersonaType, UserResponse } from '../types';
 import { GLOBAL_MARINE_LOCATIONS } from '../data/globalMarineLocations';
@@ -184,10 +184,28 @@ export const Navbar: React.FC<NavbarProps> = ({
                       <span>{p.label}</span>
                     </button>
                   ))}
+                  <div className="border-t border-slate-100 my-1" />
+                  <a
+                    href="/admin"
+                    className="w-full text-left px-3 py-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-50 flex items-center space-x-2 transition-colors"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Admin Dashboard</span>
+                  </a>
                 </div>
               )}
             </div>
           </div>
+
+          {/* Admin Console Quick Button */}
+          <a
+            href="/admin"
+            className="hidden xl:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 transition-all shadow-sm"
+            title="Open VARUNA Admin Dashboard"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Admin</span>
+          </a>
 
           {/* Generate Report Button */}
           <button

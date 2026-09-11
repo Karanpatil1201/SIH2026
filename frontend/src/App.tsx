@@ -201,9 +201,14 @@ export function App() {
   // Handle Admin Route
   if (window.location.pathname.startsWith('/admin')) {
     return (
-      <div className="relative">
-        {isLoginOpen && <LoginModal isOpen={isLoginOpen} onLoginSuccess={handleLoginSuccess} onClose={() => {}} />}
-        {currentUser && (
+      <div className="relative min-h-screen bg-slate-900">
+        {!currentUser ? (
+          <LoginModal
+            isOpen={true}
+            onLoginSuccess={handleLoginSuccess}
+            onClose={() => { window.location.href = '/'; }}
+          />
+        ) : (
           <AdminDashboard currentUser={currentUser} onLogout={handleLogout} />
         )}
       </div>
